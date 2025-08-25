@@ -1,0 +1,545 @@
+---
+title: "Dokumentation Nächtigungsvorschau"
+subtitle: "R-Code"
+author: "Nicholas Katz – JR POLICIES, Karsten Reichold – TU Wien, Martin Wagner – AAU"
+date: "25.08.2025"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+  github_document:
+        html_preview: FALSE
+
+---
+---
+
+```{r, echo=FALSE}
+htmltools::img(src = knitr::image_uri("../data/logo.png"), 
+               alt = 'logo', 
+               style = 'position:absolute; top:0; right:-80px; padding:10px;')
+
+################################################################
+################## preliminary settings ########################
+################################################################
+
+# specify your local directory (where data is saved):
+my_local_dir <- getwd() 
+
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE)
+```
+
+## Einleitung
+Ziel des Projekts ist die **Erstellung einer Nächtigungsprognose für die österreichischen Tourismusregionen**. Diese erfolgt auf Monats- und Tagesbasis. Zudem können Monatswerte nach Kategorie und Herkunft dargestellt werden, wobei auf dieser geringen Aggregationsebene erhebliche Unsicherheiten bestehen.
+Unter Verwendung von Informationen zu Ferien, Feiertagen, Events wurden mithilfe eines Random-Forest-Modells Monatsprognosen erstellt. Unter Verwendung von Mobilfunkdaten und einer adaptiven LASSO-Regression wurde die Monatsprognose auf Tagesniveau disaggregiert. Die vorliegende Dokumentation beschreibt die Vorgehensweise anhand einer Musterregion.
+
+## Genutzte Pakete und Hilfsfunktionen
+
+Für die Vorgehensweise wurden unterschiedliche Pakete genutzt. `ggplot2` ist ein Standardpaket zur Datenvisualisierung, `forecast` ist eine Prognosetoolbox für Zeitreihendaten. Das Paket `data.table` hilft bei der schnellen Bearbeitung von großen Datensätzen (Aggregation, Joins, Modifikationen).`randomForest` inkludiert die Implementierung von Random Forests nach Breiman (2001). `tsutils` ist eine Toolbox zur Visualisierung, Dekomposition und Modellierung von Zeitreihen. ``fpp3`` ist die Kollektion von Funktionalitäten von Hyndman und Athanasopoulos, die in "Forecasting: Principles and Practice" (3rd Edition) Erwähnung finden. `rangerts` ist eine neuere Modellspezifikation von Random Forests, die ein "Block Bootstrapping" (Zeitabhängigkeiten der Daten) implementiert – eine Dokumentation ist hier zu finden: <https://github.com/hyanworkspace/rangerts?tab=readme-ov-file>. Das Paket `dplyr` umfasst viele "Quality-of-Life"-Funktionen zum Datenmanagement und Data Wrangling. Auch das Package `lubridate` umfasst einige Funktionalitäten, um das Arbeiten mit Datum und Uhrzeiten zu erleichtern. Das Paket `stringr` liefert viele Hilfsfunktionen für den Umgang mit Textdaten (Strings). Das Paket `glmnet` ist ein Paket zur Verwendung von fortgeschrittenen statistischen Modellen, das hier für die Tagesdisaggregation mittels adaptiver LASSO genutzt wird.
+
+```{r packages}
+################################################################
+################## packages ####################################
+################################################################
+library(ggplot2)
+library(forecast)
+library(fpp3)
+library(data.table)
+library(randomForest) # for randomForest()
+library(tsutils) # for lagmatrix()
+
+# for random forest with moving block bootstrap:
+library(rangerts) # https://github.com/hyanworkspace/rangerts # quiet = TRUE to mask c++ compilation messages, optional # devtools::install_github("hyanworkspace/rangerts", quiet = TRUE)
+library(dplyr)
+
+library(lubridate)
+library(stringr)
+library(glmnet)
+```
+
+In einem nächsten Schritt werden Hilfsfunktionen definiert, die im Nachgang verwendet wurden.Für die Tagesprognose wurde eine Funktion zur Behandlung von starken Ausreißern erstellt.
+
+```{r helpers}
+################################################################
+################## own functions ###############################
+################################################################
+
+trimmed_resid <- function(x){
+  quantiles <- quantile( x, c(.1, .9 ) )
+  x[ x < quantiles[1] ] <- quantiles[1]
+  x[ x > quantiles[2] ] <- quantiles[2]
+  x
+}
+```
+
+## Dateninitialisierung
+
+Die gewünschte Region wird ausgewählt (``i`` entspricht dabei dem Index der Positionierung im Regionsvektor) und der Prognosezeitraum wird auf zwölf Monate festgelegt.
+
+```{r}
+# Select Region
+i = 1 # e.g. i=1 corresponds to region = "Achensee"
+
+
+# forecasting horizon (in months):
+H <- 12
+```
+
+
+Im nächsten Schritt wurden die Rohdaten, Ferien und Feiertage sowie Events und Konzerte geladen.
+
+```{r load data}
+################################################################
+################## data preprocessing ##########################
+################################################################
+
+# read whole data set (saved as .csv file):
+data <- read.csv2("../data/monthly_stays.csv")
+
+
+# read additional data file containing holidays (saved as .csv file):
+holidays <- read.csv2("../data/Ferien_und_Feiertage.csv")
+
+daily_events_s <- read.csv2("../data/Events_Konzerte_daily_K.csv")
+daily_events_s[is.na(daily_events_s)] <- ""
+daily_events_s[,-1][daily_events_s[-1]!=""] <- 1
+daily_events_s[,-1][daily_events_s[-1]==""] <- 0
+daily_events_m <- read.csv2("../data/Events_Konzerte_daily_M.csv")
+daily_events_m[is.na(daily_events_m)] <- ""
+daily_events_m[,-1][daily_events_m[-1]!=""] <- 1
+daily_events_m[,-1][daily_events_m[-1]==""] <- 0
+daily_events_l <- read.csv2("../data/Events_Konzerte_daily_G.csv")
+daily_events_l[is.na(daily_events_l)] <- ""
+daily_events_l[,-1][daily_events_l[-1]!=""] <- 1
+daily_events_l[,-1][daily_events_l[-1]==""] <- 0
+
+dummy_ostern <- holidays$Ostersonntag
+dummy_pfingsten <- holidays$Pfingsten
+dummy_feiertage_AT <- holidays$`Freie Tage Österreich`
+dummy_feiertage_DE <- holidays$`Freie Tage Deutschland`
+dummy_feiertage_Rest <- holidays$`Freie Tage Rest`
+dummy_fronleichnam <- holidays$Fronleichnam
+dummy_winterbayern <- holidays$winterferien_bayern
+dummy_herbstferien <- holidays$Herbstferien
+dummy_schaltjahr <- holidays$Schaltjahr
+
+# get events for specific region
+eventframe <- read.csv2("../data/Events_Konzerte_monatlich.csv")
+eventframe[is.na(eventframe)] <- 0
+eventframe <- eventframe[,i+3]
+
+```
+
+Auch Hilfstabellen wurden erstellt, um die Ergebnisse der folgenden Auswertungen automatisiert abspeichern zu können. Für alle Regionen wurde ein umfangreicher Gridsearch durchgeführt, um die ideale Kombination aus Parametern für die Modelle auszuwählen – diese werden hier automatisch für die Region ausgelesen. Nach derzeitigem Stand wird die optimale Variante nach RMSE gewählt.
+
+```{r}
+# create vector of regions:
+region_vec <- data$Region[seq(1,428,by=4)] # 107 regions (100 regular and 7 federal state rest regions), 4 categories
+
+# create outputmatrix
+outputmatrix <- matrix(NaN, nrow = 308,ncol=length(region_vec))
+outputmatrix <- outputmatrix %>% as.data.frame()
+colnames(outputmatrix) <- region_vec
+
+daily_output_matrix <- matrix(NaN, nrow=365,ncol = length(region_vec)) %>% as.data.frame()
+colnames(daily_output_matrix) <- region_vec
+
+
+
+# load the best parameterization based on extensive gridsearch
+region <- region_vec[i]
+method_sample <- read.csv2("../data/region_method_rmse.csv") 
+usemethod <- method_sample[,3][method_sample$region_vec == region]
+sample <- method_sample[,4][method_sample$region_vec == region]
+fwindow <- method_sample[,5][method_sample$region_vec == region]
+block <- method_sample[,6][method_sample$region_vec == region]
+lagvar <- method_sample[,7][method_sample$region_vec == region]
+
+
+```
+
+## Vorarbeiten
+
+In einem nächsten Schritt werden die Daten eingelesen. Daraufhin werden die Daten in einen speziellen Zeitreihentyp transformiert, um damit für die weitere Analyse besser arbeiten zu können.
+
+```{r}
+# get data
+data_region_gesamt <- data |>
+  filter(Region == region) |>
+  group_by(`Saison.Tourismusmonat`)
+
+# create date vector in required format:
+data_region_gesamt$Monat = yearmonth(seq(as.Date("1999-11-01"), as.Date("2025-06-01"), by = "1 month")) #%>% rep(each=2)
+
+data_region_gesamt <- data_region_gesamt %>% group_by(Monat) %>% summarise(Anzahl = sum(Ergebnis))
+
+
+# create time series data frame:
+region_gesamt <- tsibble(Monat = data_region_gesamt$Monat, Anzahl = as.numeric(data_region_gesamt$Anzahl), index = Monat)
+
+```
+
+
+Für die Evaluierung wurden die Daten in einen Trainings- und einen Testdatensatz unterteilt – diese Notwendigkeit entfällt bei der Out-of-Sample-Prognose.
+
+```{r}
+  # consider the whole sample period:
+  region_gesamt_total <- region_gesamt[1:308,] 
+  region_gesamt_training <- region_gesamt[1:296,] 
+  region_gesamt_test <- region_gesamt[297:308,] 
+  x_covid_training <- c(rep(0, 242),rep(1,24),rep(0,24)) # Covid period in the training sample: 01/2020 - 12/2021 (2 years)
+```
+
+Eine Unterscheidung der regionalen Modelle ist der betrachtete Zeitraum. Hier wurden unterschiedliche Spezifikationen getestet: (i) das volle Sample von November 1999 bis heute, (ii) ein verringertes Sample ab Jänner 2010 sowie (iii) ein deutlich verringertes Sample ab Jänner 2015.
+
+```{r}
+
+if(sample == "short_time") { # ab jänner 2010
+  dummy_ostern <- holidays$Ostersonntag
+  dummy_pfingsten <- holidays$Pfingsten
+  dummy_feiertage_AT <- holidays$`Freie Tage Österreich`
+  dummy_feiertage_DE <- holidays$`Freie Tage Deutschland`
+  dummy_feiertage_Rest <- holidays$`Freie Tage Rest`
+  dummy_fronleichnam <- holidays$Fronleichnam
+  dummy_winterbayern <- holidays$semester_bayern
+  dummy_herbstferien <- holidays$Herbstferien
+  dummy_event_l <- eventframe
+  dummy_schaltjahr <- holidays$Schaltjahr
+  
+  x_earlyperiod <- c(rep(1, 120),rep(0,8000))
+  x_covid <- c(rep(0, 242),rep(1,24),rep(0,8000)) # Covid period 01/2020 - 12/2021 (2 years)
+  x_postcov <- c(rep(0, 242),rep(0,24),rep(1,12),rep(0,8000)) # Covid recovery period 01/2022 - 12/2022 (1 year)
+  
+  # forecast
+  training_set <- region_gesamt[123:308,]#[1:290,] # given the first n observations, forecast the next observation 
+  # forecast
+  dummy_monat <- c(11:12,rep(1:12,27))
+  
+  
+  dummy_ostern <- dummy_ostern[123:nrow(holidays)]#holidays$Ostersonntag
+  dummy_pfingsten <- dummy_pfingsten[123:nrow(holidays)]#holidays$Pfingsten
+  dummy_feiertage_AT <- dummy_feiertage_AT[123:nrow(holidays)]#holidays$`Freie Tage Österreich`
+  dummy_feiertage_DE <- dummy_feiertage_DE[123:nrow(holidays)]#holidays$`Freie Tage Deutschland`
+  dummy_feiertage_Rest <- dummy_feiertage_Rest[123:nrow(holidays)]#holidays$`Freie Tage Rest`
+  dummy_fronleichnam <- dummy_fronleichnam[123:nrow(holidays)]#holidays$`Ferien Monatsgrenze`
+  dummy_winterbayern <- dummy_winterbayern[123:nrow(holidays)]#holidays$semester_bayern
+  dummy_herbstferien <- dummy_herbstferien[123:nrow(holidays)]
+  dummy_event_l <-dummy_event_l[123:nrow(holidays)]
+  dummy_schaltjahr <- dummy_schaltjahr[123:nrow(holidays)]
+  
+  dummy_monat <- c(rep(1:12,27))#c(11:12,rep(1:12,25))
+  
+  # dummys for exlcuding early periods
+  x_earlyperiod <- x_earlyperiod[123:8120]#c(rep(1, 120),rep(0,8000))
+  x_covid <- x_covid[123:8120]#c(rep(0, 242),rep(1,24),rep(0,8000)) # Covid period 01/2020 - 12/2021 (2 years)
+  x_postcov <- x_postcov[123:8120]#c(rep(0, 242),rep(0,24),rep(1,12),rep(0,8000)) # Covid recovery period 01/2022 - 12/2022 (1 year)
+  
+  
+} else if(sample == "very_short_time") { # ab jänner 2015
+  dummy_ostern <- holidays$Ostersonntag
+  dummy_pfingsten <- holidays$Pfingsten
+  dummy_feiertage_AT <- holidays$`Freie Tage Österreich`
+  dummy_feiertage_DE <- holidays$`Freie Tage Deutschland`
+  dummy_feiertage_Rest <- holidays$`Freie Tage Rest`
+  dummy_fronleichnam <- holidays$Fronleichnam
+  dummy_winterbayern <- holidays$semester_bayern
+  dummy_herbstferien <- holidays$Herbstferien
+  dummy_event_l <- eventframe
+  dummy_schaltjahr <- holidays$Schaltjahr
+  
+  x_earlyperiod <- c(rep(1, 120),rep(0,8000))
+  x_covid <- c(rep(0, 242),rep(1,24),rep(0,8000)) # Covid period 01/2020 - 12/2021 (2 years)
+  x_postcov <- c(rep(0, 242),rep(0,24),rep(1,12),rep(0,8000)) # Covid recovery period 01/2022 - 12/2022 (1 year)
+  
+  # forecast
+  training_set <- region_gesamt[183:308,]#[1:290,] # given the first n observations, forecast the next observation 
+  # forecast
+  dummy_monat <- c(11:12,rep(1:12,27))
+  
+  
+  dummy_ostern <- dummy_ostern[183:nrow(holidays)]#holidays$Ostersonntag
+  dummy_pfingsten <- dummy_pfingsten[183:nrow(holidays)]#holidays$Pfingsten
+  dummy_feiertage_AT <- dummy_feiertage_AT[183:nrow(holidays)]#holidays$`Freie Tage Österreich`
+  dummy_feiertage_DE <- dummy_feiertage_DE[183:nrow(holidays)]#holidays$`Freie Tage Deutschland`
+  dummy_feiertage_Rest <- dummy_feiertage_Rest[183:nrow(holidays)]#holidays$`Freie Tage Rest`
+  dummy_fronleichnam <- dummy_fronleichnam[183:nrow(holidays)]#holidays$`Ferien Monatsgrenze`
+  dummy_winterbayern <- dummy_winterbayern[183:nrow(holidays)]#holidays$semester_bayern
+  dummy_herbstferien <- dummy_herbstferien[183:nrow(holidays)]
+  dummy_event_l <-dummy_event_l[183:nrow(holidays)]
+  dummy_schaltjahr <- dummy_schaltjahr[183:nrow(holidays)]
+
+  
+  dummy_monat <- c(rep(1:12,27))#c(11:12,rep(1:12,25))
+  
+  # dummys for exlcuding early periods
+  x_earlyperiod <- x_earlyperiod[183:8120]#c(rep(1, 120),rep(0,8000))
+  x_covid <- x_covid[183:8120]#c(rep(0, 242),rep(1,24),rep(0,8000)) # Covid period 01/2020 - 12/2021 (2 years)
+  x_postcov <- x_postcov[183:8120]#c(rep(0, 242),rep(0,24),rep(1,12),rep(0,8000)) # Covid recovery period 01/2022 - 12/2022 (1 year)
+  
+  
+} else if(sample == "long_time") {
+  dummy_ostern <- holidays$Ostersonntag
+  dummy_pfingsten <- holidays$Pfingsten
+  dummy_feiertage_AT <- holidays$`Freie Tage Österreich`
+  dummy_feiertage_DE <- holidays$`Freie Tage Deutschland`
+  dummy_feiertage_Rest <- holidays$`Freie Tage Rest`
+  dummy_fronleichnam <- holidays$Fronleichnam
+  dummy_winterbayern <- holidays$semester_bayern
+  dummy_herbstferien <- holidays$Herbstferien
+  dummy_event_l <- eventframe
+  dummy_schaltjahr <- holidays$Schaltjahr
+  
+  x_earlyperiod <- c(rep(1, 120),rep(0,8000))
+  x_covid <- c(rep(0, 242),rep(1,24),rep(0,8000)) # Covid period 01/2020 - 12/2021 (2 years)
+  x_postcov <- c(rep(0, 242),rep(0,24),rep(1,12),rep(0,8000)) # Covid recovery period 01/2022 - 12/2022 (1 year)
+  
+  # forecast
+  training_set <- region_gesamt[1:308,]#[1:290,]
+  # forecast
+  dummy_monat <- c(11:12,rep(1:12,27))
+  
+}  
+```
+
+## Prognosen
+
+Für die Monatsprognose wurden vier unterschiedliche Modelle definiert. Einerseits wurde ein klassischer Random Forest nach Breiman (2001) betrachtet, andererseits wurde eine Spezifikation gewählt, die das Bootstrapping der Methode modifiziert, um die serielle Korrelation der Zeitreihe besser abzufangen. Diese beiden Verfahren wurden dann jeweils auf zwei unterschiedliche Arten betrachtet. Einerseits wurde die „rohe“ Zeitreihe verwendet, um eine Prognose zu erstellen, andererseits wurde die Zeitreihe unter Verwendung von STL (Saison-Trend-Dekomposition mittels Loess) nach Cleveland et al. (1990) trendbereinigt. Beim letzteren Ansatz wird der Trend separat über exponentielle Glättung vorhergesagt, während der Random Forest die verbliebene Zeitreihe vorhersagt – die beiden Komponenten werden anschließend zur Prognose zusammengeführt.
+
+Neben den offiziellen Nächtigungsstatistiken und kalendarischen Effekten spielen auch Verzögerungsterme (lags) der Zeitreihe und ihrer Komponenten eine Rolle für die Prognose.
+
+Die nachfolgende Abbildung zeigt beispielhaft zwei der 2.500 erstellten Regressionsbäume des Random Forests für die Region Kitzbüheler Alpen – St. Johann. Die Splits erfolgen hier beispielsweise anhand der Anzahl der Feiertage eines Monats, des konkreten Werts der Verzögerungsterme (Lags), des Monats, der Winterferien in Bayern und ähnlichem.
+
+![Abbildung 1: Beispiel von Regressionsbäumen](rf_3trees.png)
+
+Für die Prognose wird die ursprüngliche Zeitreihe mithilfe von STL (Saison-Trend-Dekomposition mittels Loess; Cleveland et al., 1990) zunächst trendbereinigt, bevor der Random Forest auf den restlichen Komponenten trainiert wird. Der Trend wird dann separat prognostiziert, indem die Methode der exponentiellen Glättung ohne eine saisonale Komponente auf die Daten angewendet wird.
+
+```{r}
+# forecasting horizon (in months):
+H <- 12
+
+# Decomposition required for both steps
+forecasts_RF <- numeric(H)
+
+# add holt-winters forecast to avoid endtime problem
+hwmodel <- training_set[(nrow(training_set)- 36):nrow(training_set),] %>% HoltWinters(seasonal = "additive")
+hw_forecast <- predict(hwmodel, n.ahead = 36)
+
+hw_forecast <- as_tsibble(hw_forecast)
+colnames(hw_forecast) <- c("Monat","Anzahl")
+
+
+dcmp_set <- bind_rows(training_set,hw_forecast) %>% stl(t.window=fwindow, s.window="periodic", robust=TRUE)#|> model(stl = STL(Anzahl))# 
+dcmp_training_set <- dcmp_set$time.series %>% window(end= c(year(ymd("2025-06-01")),month(ymd("2025-06-01"))))
+trend_training_set <- dcmp_training_set[,2]#dcmp_training_set[[1]][[1]][["fit"]][["decomposition"]][["trend"]]
+trend_forecast <- (trend_training_set |> forecast(h=12))
+
+
+season_training_set <- dcmp_training_set[,1]
+season_forecast <- (dcmp_training_set[,1] |> forecast(h=12))
+
+
+```
+
+
+### Normaler Random Forest
+
+Random Forest: Random Forests kommen ursprünglich aus der Domain der Klassifikation, können jedoch mit geringfügiger Modifikation als Regressionsmethode angewandt werden. Die Interpretation der Vorhersage als eine Klassifizierung der Monate (z.B. welcher Monat? Günstige oder eher schlechte Tourismusentwicklung etc.) rechtfertigt die Verwendung von Zufallswäldern zur Prognose von touristischen Nächtigungen. Wir betrachten hier vier verschiedene Versionen von Zufallswäldern. Die erste Version ist ein klassischer Random Forest wie in Breiman (2001) vorgeschlagen, der an die ursprünglichen Zeitreihen angepasst wird, wobei die ersten p Lags der Zeitreihe sowie andere Dummy-Variablen als Prädiktoren dienen.
+
+```{r}
+if(usemethod %in% c('detrend_normal','normal')) {
+  
+  # number of lags of y to be inlcuded as regressors in random forest:
+  p = lagvar 
+  
+  # iterative forecasts:
+  #for (h in 1:H){
+  n = dim(training_set)[1]
+  
+  #plot(dcmp_training_set)
+  # detrended series:
+  ytilde <- training_set$Anzahl[1:n] - trend_training_set[1:n]
+  
+  # create lags of detrended time series as additional explanatory variables:
+  ytilde_lags <- lagmatrix(ytilde,0:p)
+  
+  # create training set (dependent variable and matrix of explanatory variables)
+  ytilde_training <- ytilde_lags[(p+1):n,1]
+  x_training <- cbind(ytilde_lags[(p+1):n,2:(p+1)], # first p lags of y
+                      x_covid[(p+1):n], # indicator covid period
+                      season_training_set[p:(n-1)], # season component of first lag
+                      dummy_monat[(p+1):n], # indicator current month
+                      dummy_ostern[(p+1):n],
+                      dummy_pfingsten[(p+1):n],
+                      dummy_feiertage_AT[(p+1):n],
+                      dummy_feiertage_DE[(p+1):n],
+                      dummy_fronleichnam[(p+1):n],
+                      dummy_herbstferien[(p+1):n],
+                      dummy_winterbayern[(p+1):n],
+                      dummy_event_l[(p+1):n],
+                      dummy_schaltjahr[(p+1):n])
+  
+  # set a seed and fit the random forest:
+  set.seed(1) 
+  classifier = randomForest(y = ytilde_training,
+                            x = x_training,
+                            importance = TRUE, 
+                            replace = TRUE,
+                            ntree=1000) 
+  
+  
+  
+  for (h in 1:H){
+    n = dim(training_set)[1]
+    
+    
+    
+    # create lags of detrended time series as additional explanatory variables:
+    ytilde_lags <- lagmatrix(ytilde,0:p)
+    
+    
+    
+    # create matrix of explanatory variables for the one-step ahead forecast:
+    x_test <- cbind(t(ytilde_lags[n,1:p]), # most recent observation and its first p-1 lags
+                    x_covid[n+1], # indicator covid period for current time point
+                    season_training_set[n], # season component of most recent observation
+                    dummy_monat[n+1], # indicator current month
+                    dummy_ostern[n+1],
+                    dummy_pfingsten[n+1],
+                    dummy_feiertage_AT[n+1],
+                    dummy_feiertage_DE[n+1],
+                    dummy_fronleichnam[n+1],
+                    dummy_herbstferien[n+1],
+                    dummy_winterbayern[n+1],
+                    dummy_event_l[n+1],
+                    dummy_schaltjahr[n+1])
+
+    
+    # one-step ahead forecast of detrended time series:
+    ytilde_forecast <- predict(classifier, newdata = x_test)
+    
+    
+    # combine both forecasts:
+    forecasts_RF[h] <- ytilde_forecast + trend_forecast$mean[h]
+    
+    # extend training set with the forecasted value:
+    training_set <- dplyr::bind_rows(training_set,tsibble(Monat = (region_gesamt$Monat[308]+h), Anzahl = forecasts_RF[h], index = Monat))
+    ytilde <- c(ytilde,ytilde_forecast[[1]])
+    season_training_set <- append(season_training_set,season_forecast$mean[h])
+    
+  }
+  prognose <- forecasts_RF
+}
+```
+
+### Random Forest mit Moving Block Bootstrapping
+
+Bei diesem Ansatz wird ein Random Forest an die ursprüngliche Zeitreihe angepasst, aber der i.i.d. Bootstrap (Annahme über die Unabhängigkeit und identisch verteilte Zufallsvariable) innerhalb des Random Forest wird durch einen Block Bootstrap ersetzt, um verbleibende serielle Korrelation in den Daten zu erfassen.
+
+```{r}
+if(usemethod %in% c('detrend_mbb','mbb')) {
+  
+  
+  # number of lags of y to be inlcuded as regressors in random forest:
+  p = lagvar
+  
+  
+  
+  # iterative forecasts:
+  #for (h in 1:H){
+  n = dim(training_set)[1]
+  
+  
+  
+  # detrended series:
+  ytilde <- training_set$Anzahl[1:n] - trend_training_set[1:n]
+  
+  # create lags of detrended time series as additional explanatory variables:
+  ytilde_lags <- lagmatrix(ytilde,0:p)
+  
+  # create training set (dependent variable and matrix of explanatory variables)
+  ytilde_training <- ytilde_lags[(p+1):n,1]
+  x_training <- cbind(ytilde_lags[(p+1):n,2:(p+1)], # first p lags of y
+                      x_covid[(p+1):n], # indicator covid period
+                      season_training_set[p:(n-1)], # season component of first lag
+                      dummy_monat[(p+1):n], # indicator current month
+                      dummy_ostern[(p+1):n],
+                      dummy_pfingsten[(p+1):n],
+                      dummy_feiertage_AT[(p+1):n],
+                      dummy_feiertage_DE[(p+1):n],
+                      dummy_fronleichnam[(p+1):n],
+                      dummy_herbstferien[(p+1):n],
+                      dummy_winterbayern[(p+1):n],
+                      dummy_event_l[(p+1):n],
+                      dummy_schaltjahr[(p+1):n])
+
+  
+  # set a seed and fit the random forest:
+  set.seed(1) 
+
+  
+  rf_mbb <- rangerts::rangerts(ytilde_training ~ ., data = data.frame(x_training),
+                               num.trees = 100,
+                               mtry = max(floor(ncol(x_training)/3), 1),
+                               replace = TRUE,
+                               seed = 1,
+                               bootstrap.ts = "moving",
+                               block.size = block) 
+  
+ 
+  
+  for (h in 1:H){
+    n = dim(training_set)[1]
+    
+    
+    # create lags of detrended time series as additional explanatory variables:
+    ytilde_lags <- lagmatrix(ytilde,0:p)
+    
+    
+    
+    # create matrix of explanatory variables for the one-step ahead forecast:
+    x_test <- cbind(t(ytilde_lags[n,1:p]), # most recent observation and its first p-1 lags
+                    x_covid[n+1], # indicator covid period for current time point
+                    season_training_set[n], # season component of most recent observation
+                    dummy_monat[n+1], # indicator current month
+                    dummy_ostern[n+1],
+                    dummy_pfingsten[n+1],
+                    dummy_feiertage_AT[n+1],
+                    dummy_feiertage_DE[n+1],
+                    dummy_fronleichnam[n+1],
+                    dummy_herbstferien[n+1],
+                    dummy_winterbayern[n+1],
+                    dummy_event_l[n+1],
+                    dummy_schaltjahr[n+1])
+    
+    # one-step ahead forecast of detrended time series:
+
+    ytilde_forecast <- predict(rf_mbb, data = data.frame(x_test))$predictions
+    
+
+    
+    # combine both forecasts:
+    forecasts_RF[h] <- ytilde_forecast + trend_forecast$mean[h]
+    
+    # extend training set with the forecasted value:
+    training_set <- dplyr::bind_rows(training_set,tsibble(Monat = (region_gesamt$Monat[308]+h), Anzahl = forecasts_RF[h], index = Monat))
+    ytilde <- c(ytilde,ytilde_forecast[[1]])
+    season_training_set <- append(season_training_set,season_forecast$mean[h])
+    
+  }
+  prognose <- forecasts_RF
+}
+```
+
+
+Hier erfolgt ein kurzer Sanity Check, um negative Prognosewerte allenfalls ausschließen zu können.
+
+```{r}
+prognose[prognose<0] <- 0
+
+plot(as_date(training_set$Monat),training_set$Anzahl, type="l")
+title(region)
+```
+
+
