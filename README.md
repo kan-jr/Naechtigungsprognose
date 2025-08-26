@@ -615,17 +615,457 @@ Zum Abschluss kann das Monatsergebnis exportiert und visualisiert
 werden.
 
 ``` r
-write.csv2(training_set,"monatsprognose.csv")
+#write.csv2(training_set,"monatsprognose.csv")
 
-ggplot() + geom_line(aes(as.Date(training_set$Monat)[1:308], training_set$Anzahl[1:308])) +
-  geom_line(aes(as.Date(training_set$Monat[308:320]),  training_set$Anzahl[308:320], col="red")) +
-  theme(legend.position = "none") +
+t_id = length(training_set$Monat)
+
+ggplot() +
+  geom_line(aes(training_set$Monat, training_set$Anzahl)) +
+  geom_line(aes(training_set$Monat[(t_id-11):t_id], training_set$Anzahl[(t_id-11):t_id]),color= "red") +
   xlab("Zeit") +
-  ylab("Nächtigungen in Ferienwohnungen und Hotels") +
+  ylab("Nächtigungen gesamt") +
+  geom_vline(xintercept = dmy("01.07.2025"),linetype="dotted") +
+  annotate("text",label="Prognose->",x= dmy("01.09.2023"), y=100) +
   labs(title=region)
 ```
 
 ![](README_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+
+## Disaggregation auf tägliche Nächtigungen
+
+Zentrales Ergebnis des Forschungsprojekts ist die Disaggregation der
+monatlichen Nächtigungsprognose auf tägliche Nächtigungen. Um das
+tägliche Nächtigungsverhalten approximieren zu können, wurden
+Mobilfunkdaten von den Anbietern Drei und A1 (analysiert und zur
+Verfügung gestellt von Invenium Data Insights) erworben. Diese Daten
+wurden als Zählvariablen nach Tag und Region zur Verfügung gestellt
+(Zeitraum Jänner 2022 bis Dezember 2024). Ausgehend von den täglichen
+Verläufen, die auf Basis der Mobilfunkdaten für eine bestimmte Region
+darstellbar sind, schätzen wir zunächst die Auswirkungen von
+Wochenenden, Monaten, Ferien und Feiertagen sowie die Position der Woche
+innerhalb des Jahres. Zudem wurde für die Wintersaison 2021/2022 ein
+Dummy integriert, um die auslaufenden negativen Effekte der Pandemie
+abzubilden. Auch Events wurden für die Regionen als Dummy-Variable
+integriert.
+
+### Die approximierten “Rohdaten”
+
+Die Rohdaten wurden in einem vorgelagerten Schritt erstellt um diese in
+weiterer Folge bedenkenlos zur Verfügung stellen zu können. Dazu wurden
+diese Daten aus einer Linearkombination aus ausgewählten Daten von
+Feratel und Mobilfunkdaten von Drei und A1/Invenium erstellt.
+
+``` r
+x_m <- prognose
+
+
+# read whole data set (saved as .csv file):
+data_proxy <- read.csv2("./data/proxy_data_daily.csv")
+
+regselect = region
+
+
+data_proxy <- data_proxy |>
+  filter(Region == regselect) |>
+  select(-Region,-Regionsnummer)
+```
+
+### Das Schätzverfahren
+
+In einem nächsten Schritt wird die Datenmatrix geladen, die Dummys zu
+kalendarischen Effekten sowie Monatswerte umfasst. Zudem werden
+Eventeffekt integriert. Nicht in allen Regionen sind Eventdaten
+notwendig, es gibt jedoch einige Regionen, in denen Events eine sehr
+große Rolle für die Nächtigungen spielen, allen voran die Urlaubsregion
+Murtal mit dem Red Bull Ring in Spielberg.
+
+``` r
+D <- as.matrix(read.csv2("./data/matrix_daily_forecast.csv")[1:1096,3:115])#87/698
+
+D <- cbind(D,daily_events_s[1:1096,i+1],daily_events_m[1:1096,i+1],daily_events_l[1:1096,i+1]) #698
+
+# add lag and lead
+lag_s <- daily_events_s[1:1096,i+1] %>% lag() %>% replace(is.na(.), 0)
+lag_m <- daily_events_m[1:1096,i+1] %>% lag() %>% replace(is.na(.), 0)
+lag_l <- daily_events_l[1:1096,i+1] %>% lag() %>% replace(is.na(.), 0)
+lead_s <- daily_events_s[1:1096,i+1] %>% lead() %>% replace(is.na(.), 0)
+lead_m <- daily_events_m[1:1096,i+1] %>% lead() %>% replace(is.na(.), 0)
+lead_l <- daily_events_l[1:1096,i+1] %>% lead() %>% replace(is.na(.), 0)
+
+D <- cbind(D,lag_s, lag_m, lag_l, lead_s,lead_m,lead_l)
+
+class(D) <- "numeric"
+```
+
+Die Effekte werden aus den Mobilfunkdaten mittels adaptiver
+LASSO-Regression (Least Absolute Shrinkage and Selection Operator)
+geschätzt. Dieses Verfahren adressiert Probleme des Overfitting und der
+Multikollinearität. Das Modell arbeitet mit einem Strafterm (L1-Norm),
+der Variablen des Modells einschränkt und im Extremfall sogar
+ausschließt. Zur Implementierung wird auf das R-Paket glmnet (Friedman
+et al., 2023) zurückgegriffen. Ergänzend zur regulären LASSO-Regression
+wurde hier ein Vektor adaptiver Gewichte ergänzt, der jeden Koeffizient
+spezifisch reguliert – dieser Gewichtevektor wird dabei aus einer
+initialen OLS-Regression gewonnen.
+
+``` r
+best_coef <- as.numeric(coef(lm(data_proxy$time_series ~ D[,13:ncol(D)])))[-1]
+best_coef[is.na(best_coef)] <- 0
+
+#perform k-fold cross-validation to find optimal lambda value
+cv_model <- cv.glmnet(D[,13:ncol(D)], data_proxy$time_series,alpha = 1, intercept = TRUE,family="gaussian",penalty.factor = 1 / abs(best_coef))
+
+#find optimal lambda value that minimizes test MSE
+best_lambda <- cv_model$lambda.min
+best_lambda
+```
+
+    ## [1] 244.587
+
+``` r
+model <- glmnet(D[,13:ncol(D)], data_proxy$time_series,alpha = 1, lambda=best_lambda, intercept = TRUE,family="gaussian",penalty.factor = 1 / abs(best_coef))
+summary(model)
+```
+
+    ##           Length Class     Mode   
+    ## a0          1    -none-    numeric
+    ## beta      110    dgCMatrix S4     
+    ## df          1    -none-    numeric
+    ## dim         2    -none-    numeric
+    ## lambda      1    -none-    numeric
+    ## dev.ratio   1    -none-    numeric
+    ## nulldev     1    -none-    numeric
+    ## npasses     1    -none-    numeric
+    ## jerr        1    -none-    numeric
+    ## offset      1    -none-    logical
+    ## call        8    -none-    call   
+    ## nobs        1    -none-    numeric
+
+Nachfolgend werden die geschätzten Koeffizienten des Modells
+dargestellt. Ein Punkt bedeutet dabei, dass die Parameter aus dem Modell
+über das Schätzverfahren ausgeschieden wurden, da diese nicht
+signifikant sind.
+
+``` r
+coef(model)
+```
+
+    ## 111 x 1 sparse Matrix of class "dgCMatrix"
+    ##                                   s0
+    ## (Intercept)              4549.031727
+    ## d_newyear                 987.752660
+    ## d_dreikoenig             -566.904189
+    ## d_easter                  901.303489
+    ## d_staatsfeiertag            .       
+    ## d_christihimmelfahrt     2413.756661
+    ## d_pfingstmontag          -609.712229
+    ## d_fronleichnam           1538.285806
+    ## d_mariahimmelfahrt          .       
+    ## d_nationalfeiertag       -363.523930
+    ## d_allerheiligen          -162.324710
+    ## d_mariaempfaengnis          .       
+    ## d_xmas                   -913.752239
+    ## d_silvester               702.242690
+    ## Freitag                   841.357778
+    ## Samstag                   921.842434
+    ## Sonntag                   -44.646519
+    ## langes_we                 170.608078
+    ## herbstferien              591.273447
+    ## weihnachtsferien            .       
+    ## semesterferien_staffel1   966.669599
+    ## semesterferien_staffel2   379.000308
+    ## semesterferien_staffel3   106.733542
+    ## osterferien               171.036417
+    ## pfingstferien             609.920089
+    ## sommerferien              527.100667
+    ## winterferien_bayern      1554.223032
+    ## ostern_bayern               .       
+    ## pfingsten_bayern          226.764412
+    ## herbst_bayern               .       
+    ## ferien_bawue              366.355180
+    ## ferien_nrw                340.082110
+    ## ferien_restdeutschland    334.232034
+    ## ferien_nl                   .       
+    ## ferien_ch                   .       
+    ## ferien_it                 138.189945
+    ## ferien_cz                   .       
+    ## kw1                         .       
+    ## kw2                     -1920.818061
+    ## kw3                     -1681.772909
+    ## kw4                     -1360.059761
+    ## kw5                     -1103.127928
+    ## kw6                     -1603.001741
+    ## kw7                      -660.614367
+    ## kw8                         3.879048
+    ## kw9                      -473.317386
+    ## kw10                    -1834.095021
+    ## kw11                    -2410.202688
+    ## kw12                    -2951.856780
+    ## kw13                    -3500.809983
+    ## kw14                    -3751.133580
+    ## kw15                    -3620.628733
+    ## kw16                    -3693.608608
+    ## kw17                    -3188.652564
+    ## kw18                    -2949.954874
+    ## kw19                    -2585.691299
+    ## kw20                    -1900.658182
+    ## kw21                    -1491.785021
+    ## kw22                    -1350.656294
+    ## kw23                    -1008.780943
+    ## kw24                     -467.744786
+    ## kw25                     -119.695263
+    ## kw26                        .       
+    ## kw27                     -447.167862
+    ## kw28                     -147.856862
+    ## kw29                      166.477991
+    ## kw30                      153.158388
+    ## kw31                      652.579514
+    ## kw32                     1224.952930
+    ## kw33                      898.622117
+    ## kw34                      741.675188
+    ## kw35                        .       
+    ## kw36                        .       
+    ## kw37                        .       
+    ## kw38                      -42.085408
+    ## kw39                     -257.399817
+    ## kw40                      -45.744592
+    ## kw41                    -1825.896846
+    ## kw42                    -2074.447210
+    ## kw43                    -2647.635379
+    ## kw44                    -2984.321437
+    ## kw45                    -3551.389930
+    ## kw46                    -3541.430137
+    ## kw47                    -3675.609588
+    ## kw48                    -3578.120615
+    ## kw49                    -3557.838326
+    ## kw50                    -3388.838906
+    ## kw51                    -2879.411066
+    ## kw52                        .       
+    ## postcov                  -315.345946
+    ## we_jan                      .       
+    ## we_feb                      .       
+    ## we_mar                      .       
+    ## we_apr                      .       
+    ## we_may                    248.265146
+    ## we_jun                      .       
+    ## we_jul                      .       
+    ## we_aug                   -575.764650
+    ## we_sep                   -169.662740
+    ## we_oct                    187.325740
+    ## we_nov                   -204.143493
+    ## we_dec                      .       
+    ##                             .       
+    ##                             .       
+    ##                             .       
+    ## lag_s                       .       
+    ## lag_m                       .       
+    ## lag_l                       .       
+    ## lead_s                      .       
+    ## lead_m                      .       
+    ## lead_l                      .
+
+Um Tageseffekte, die vom Modell möglicherweise nicht getroffen werden,
+integrieren zu können, wird ein kleiner Bestandteil (ausreißerbereinigt)
+des Schätzfehlers für das Datum (Tag und Monat) mitgeführt.
+
+``` r
+# Add residuals to data set:
+u <- data_proxy$time_series-predict(model, s=best_lambda, newx = D[,13:ncol(D)]) #model$residuals
+data_proxy$u <- u
+
+data_proxy$u <- trimmed_resid(data_proxy$u)
+```
+
+Daraufhin wird die Disaggregation der Monatsprognose vorbereitet.
+Relevante Zeiträume werden definiert und die Fehlerterme werden den
+relevanten Tagen hinzugefügt, wobei diese Effekte an den Monatsgrenzen
+sowie an der Jahresgrenze (Dezember zu Jänner) stärker gewichtet wurden,
+da hier Ausschläge aufgrund der Übergänge plausibler sind.
+
+``` r
+# previous time
+date_period <- seq(as.Date("01.01.2022","%d.%m.%Y"), as.Date("31.12.2024","%d.%m.%Y"), "days")
+date_period <- format(date_period,"%d.%m.%Y")
+
+# Create vector of daily forecasts:
+forecasts <- rep(NA,365)#rep(NA,365)
+forecast_period <- seq(as.Date("01.07.2025","%d.%m.%Y"), as.Date("30.06.2026","%d.%m.%Y"), "days")
+forecast_period <- format(forecast_period,"%d.%m.%Y")
+daily_forecasts <- data.frame(forecast_period,forecasts)
+
+tdates <- dmy(date_period)
+tdates_fp <- dmy(forecast_period)
+
+
+tdates_dm <- paste(str_pad(day(tdates), 2, pad = "0"),
+                   str_pad(month(tdates), 2, pad = "0"),
+                   sep = ".")
+
+tdates_fp_dm <- paste(str_pad(day(tdates_fp), 2, pad = "0"),
+                      str_pad(month(tdates_fp), 2, pad = "0"),
+                      sep = ".")
+
+for(idnr in 1:365){ 
+  if(daily_forecasts$forecast_period[idnr] %>% dmy() %>% month() == 12 || daily_forecasts$forecast_period[idnr] %>% dmy() %>% month() == 1 ) {
+    temp <- data_proxy$u[tdates_dm == tdates_fp_dm[idnr]] # could contain zero, one, or more than one element
+  } else if(daily_forecasts$forecast_period[idnr] %>% dmy() %>% day() < 6 || daily_forecasts$forecast_period[idnr] %>% dmy() %>% day() > 24 ) {
+    temp <- data_proxy$u[tdates_dm == tdates_fp_dm[idnr]]/2 # could contain zero, one, or more than one element
+  } else {temp <- data_proxy$u[tdates_dm == tdates_fp_dm[idnr]]/3}
+  if(length(temp) > 0){
+    daily_forecasts$forecasts[idnr] <- mean(temp)#temp[length(temp)]#trimmed_resid(temp[length(temp)])
+  } # else: still NA
+}
+```
+
+Im nächsten Schritt wird analog zur vorherigen Datenmatrix eine Matrix
+für den Prognosezeitraum erstellt.
+
+``` r
+# Second step: update the daily forecast by adding dummy effects
+last_available_date = as.Date("01.06.2025","%d.%m.%Y")
+tmpcheck1 <- read.csv2("./data/matrix_daily_forecast.csv")[,1:2]
+tmpcheck1$date <- as.Date(tmpcheck1$date,format="%d.%m.%Y")
+rowdate1 <- tmpcheck1[tmpcheck1$date==as.Date(last_available_date %m+% months(1)),1]#1096
+tmpcheck2 <- read.csv2("./data/matrix_daily_forecast.csv")[,1:2]
+tmpcheck2$date <- as.Date(tmpcheck2$date,format="%d.%m.%Y")
+rowdate2 <- tmpcheck2[tmpcheck2$date==as.Date(last_available_date %m+% months(13)-1),1]#1096
+D_fp <- as.matrix(read.csv2("./data/matrix_daily_forecast.csv")[rowdate1:rowdate2,3:115])
+
+D_fp <- cbind(D_fp,daily_events_s[rowdate1:rowdate2,i+1],daily_events_m[rowdate1:rowdate2,i+1],daily_events_l[rowdate1:rowdate2,i+1])
+
+# add lag and lead
+lag_s <- daily_events_s[rowdate1:rowdate2,i+1] %>% lag() %>% replace(is.na(.), 0)
+lag_m <- daily_events_m[rowdate1:rowdate2,i+1] %>% lag() %>% replace(is.na(.), 0)
+lag_l <- daily_events_l[rowdate1:rowdate2,i+1] %>% lag() %>% replace(is.na(.), 0)
+lead_s <- daily_events_s[rowdate1:rowdate2,i+1] %>% lead() %>% replace(is.na(.), 0)
+lead_m <- daily_events_m[rowdate1:rowdate2,i+1] %>% lead() %>% replace(is.na(.), 0)
+lead_l <- daily_events_l[rowdate1:rowdate2,i+1] %>% lead() %>% replace(is.na(.), 0)
+
+D_fp <- cbind(D_fp,lag_s, lag_m, lag_l, lead_s,lead_m,lead_l)
+
+class(D_fp) <- "numeric"
+```
+
+Anschließend werden die geschätzten Effekte auf die zu
+prognostizierenden Tage aufgerechnet, wobei die Datenmatrix die Effekte
+definiert.
+
+``` r
+# Add dummy effects:
+coeffs <- as.matrix(model$beta)
+daily_forecasts$forecasts <- daily_forecasts$forecasts + model$a0
+
+
+for(idnr in 1:365){
+  for (j in 1:length(coeffs)) {
+    if(D_fp[idnr,12+j] == 1) {
+      daily_forecasts$forecasts[idnr] <-daily_forecasts$forecasts[idnr] + coeffs[j] 
+    }
+  }
+}
+```
+
+### Die Glättung
+
+Der letzte Schritt betrifft die Glättung der Ergebnisse, um die
+Konsistenz der täglichen Werte mit der Monatsprognose zu gewährleisten.
+Die Prüfsumme wird ausgegeben und sollte null sein (oder ein minimaler
+Wert im hinteren Kommabereich aufgrund von Rundungsdifferenzen).
+
+``` r
+# get running index
+rndx <- 12-lubridate::month(last_available_date)+1
+
+
+
+for(idnr in 1:12){
+
+  # specify the elements of x_d corresponding to month i:
+  if(idnr == 1){
+    idx <- c(1:365)*D_fp[,idnr]
+    j = if(rndx<13) {rndx} else {rndx-12}#4
+  } else if (idnr == 2){
+    idx <- c(1:365)*D_fp[,idnr]
+    j = if(rndx+1<13) {rndx+1} else {rndx+1-12}#5
+  } else if (idnr == 3){
+    idx <- c(1:365)*D_fp[,idnr]
+    j = if(rndx+2<13) {rndx+2} else {rndx+2-12}##6
+  } else if (idnr == 4){
+    idx <- c(1:365)*D_fp[,idnr]
+    j = if(rndx+3<13) {rndx+3} else {rndx+3-12}#7
+  } else if (idnr == 5){
+    idx <- c(1:365)*D_fp[,idnr]
+    j = if(rndx+4<13) {rndx+4} else {rndx+4-12}#8
+  } else if (idnr == 6){
+    idx <- c(1:365)*D_fp[,idnr]
+    j = if(rndx+5<13) {rndx+5} else {rndx+5-12}#9
+  } else if (idnr == 7){
+    idx <- c(1:365)*D_fp[,idnr]
+    j = if(rndx+6<13) {rndx+6} else {rndx+6-12}#10
+  } else if (idnr == 8){
+    idx <- c(1:365)*D_fp[,idnr]
+    j = if(rndx+7<13) {rndx+7} else {rndx+7-12}#11
+  } else if (idnr == 9){
+    idx <- c(1:365)*D_fp[,idnr]
+    j = if(rndx+8<13) {rndx+8} else {rndx+8-12}#12
+  } else if (idnr == 10){
+    idx <- c(1:365)*D_fp[,idnr]
+    j = if(rndx+9<13) {rndx+9} else {rndx+9-12}#1
+  } else if (idnr == 11){
+    idx <- c(1:365)*D_fp[,idnr]
+    j = if(rndx+10<13) {rndx+10} else {rndx+10-12}#2
+  } else if (idnr == 12){
+    idx <- c(1:365)*D_fp[,idnr]
+    j = if(rndx+11<13) {rndx+11} else {rndx+11-12}#3
+  }
+
+
+  daily_forecasts$forecasts <- zoo::na.locf(daily_forecasts$forecasts)
+  daily_forecasts$forecasts[idx] <- pmax(daily_forecasts$forecasts[idx]*(x_m[j]/sum(daily_forecasts$forecasts[idx],na.rm=TRUE)),rep(0,length(daily_forecasts$forecasts[idx])), na.rm = T)
+  
+  daily_forecasts$forecasts[idx] <- daily_forecasts$forecasts[idx]*(x_m[j]/sum(daily_forecasts$forecasts[idx],na.rm=TRUE))
+}
+print(sum(x_m)- sum(daily_forecasts$forecasts, na.rm = T))
+```
+
+    ## [1] 2.328306e-10
+
+Das Ergebnis der täglichen Disaggregation sowie die mittleren
+Monatswerte sind in folgender Grafik abgebildet, zudem werden die
+Tagesergebnisse exportiert.
+
+``` r
+#write.csv2(daily_forecasts, "tagesprognose.csv")
+
+plot(daily_forecasts$forecasts,type="l",col = rgb(0,0,0), lty = 1, lwd = 2, xlab = "Tage (Juli 2025 bis Juni 2026)", ylab = "Übernachtungen", main = regselect)
+idx <- which(D_fp[,1] != 0)
+lines(idx, rep(x_m[if(rndx<13) {rndx} else {rndx-12}]/length(idx),length(idx)), col = rgb(1, 0, 0, alpha = 1), lty = 1, lwd = 3)
+idx <- which(D_fp[,2] != 0)
+lines(idx, rep(x_m[if(rndx+1<13) {rndx+1} else {rndx+1-12}]/length(idx),length(idx)), col = rgb(1, 0, 0, alpha = 1), lty = 1, lwd = 3)
+idx <- which(D_fp[,3] != 0)
+lines(idx, rep(x_m[if(rndx+2<13) {rndx+2} else {rndx+2-12}]/length(idx),length(idx)), col = rgb(1, 0, 0, alpha = 1), lty = 1, lwd = 3)
+idx <- which(D_fp[,4] != 0)
+lines(idx, rep(x_m[if(rndx+3<13) {rndx+3} else {rndx+3-12}]/length(idx),length(idx)), col = rgb(1, 0, 0, alpha = 1), lty = 1, lwd = 3)
+idx <- which(D_fp[,5] != 0)
+lines(idx, rep(x_m[if(rndx+4<13) {rndx+4} else {rndx+4-12}]/length(idx),length(idx)), col = rgb(1, 0, 0, alpha = 1), lty = 1, lwd = 3)
+idx <- which(D_fp[,6] != 0)
+lines(idx, rep(x_m[if(rndx+5<13) {rndx+5} else {rndx+5-12}]/length(idx),length(idx)), col = rgb(1, 0, 0, alpha = 1), lty = 1, lwd = 3)
+idx <- which(D_fp[,7] != 0)
+lines(idx, rep(x_m[if(rndx+6<13) {rndx+6} else {rndx+6-12}]/length(idx),length(idx)), col = rgb(1, 0, 0, alpha = 1), lty = 1, lwd = 3)
+idx <- which(D_fp[,8] != 0)
+lines(idx, rep(x_m[if(rndx+7<13) {rndx+7} else {rndx+7-12}]/length(idx),length(idx)), col = rgb(1, 0, 0, alpha = 1), lty = 1, lwd = 3)
+idx <- which(D_fp[,9] != 0)
+lines(idx, rep(x_m[if(rndx+8<13) {rndx+8} else {rndx+8-12}]/length(idx),length(idx)), col = rgb(1, 0, 0, alpha = 1), lty = 1, lwd = 3)
+idx <- which(D_fp[,10] != 0)
+lines(idx, rep(x_m[if(rndx+9<13) {rndx+9} else {rndx+9-12}]/length(idx),length(idx)), col = rgb(1, 0, 0, alpha = 1), lty = 1, lwd = 3)
+idx <- which(D_fp[,11] != 0)
+lines(idx, rep(x_m[if(rndx+10<13) {rndx+10} else {rndx+10-12}]/length(idx),length(idx)), col = rgb(1, 0, 0, alpha = 1), lty = 1, lwd = 3)
+idx <- which(D_fp[,12] != 0)
+lines(idx, rep(x_m[if(rndx+11<13) {rndx+11} else {rndx+11-12}]/length(idx),length(idx)), col = rgb(1, 0, 0, alpha = 1), lty = 1, lwd = 3)
+grid()
+```
+
+![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
 
 ## Hinweise
 
