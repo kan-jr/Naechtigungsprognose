@@ -1067,6 +1067,20 @@ grid()
 
 ![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
 
+## Mögliche Anwendungsbeispiele
+
+Über die Schnittstelle können Daten für die eigene Anwendung bezogen werden, für tiefergehende Fragestellungen empfiehlt es sich jedoch, den vorliegenden Code selbst anzuwenden und auch die Inputparameter zu ergänzen und um eigene Eventlisten etc. anzureichern. Für eine Übersicht über mögliche Anwendungen werden hier exemplarisch ein paar Beispiele angeführt:
+
+Tourismusregionen stehen vor der Herausforderung, Personal- und Infrastrukturressourcen langfristig an die erwartete Nachfrage anzupassen. Das Prognosemodell liefert auf Monatsbasis Nächtigungsprognosen, die eine frühzeitige Planung von Personal, Verkehrsdiensten, touristischen Angeboten und Marketingmaßnahmen ermöglichen. Durch die einjährige Vorausprognose können Verantwortliche in Tourismusverbänden saisonale Spitzen frühzeitig erkennen und strategische Entscheidungen – etwa zur Verteilung von Budgets, zur Planung von Events oder zur Koordination mit regionalen Betrieben – datenbasiert treffen.
+
+Für Hotelbetreiber:innen und Anbieter:innen von Ferienwohnungen bieten die täglichen Prognosen wertvolle Informationen zur kurzfristigen Nachfrageentwicklung. Auf Basis der disaggregierten Tageswerte lassen sich Belegungsstrategien, Preisgestaltung (Revenue Management) und Personalplanung optimieren. Besonders in umkämpften Märkten können Betriebe dadurch ihre Auslastung steigern, indem sie Kapazitäten und Preise dynamisch an vorhergesagte Nachfrageveränderungen anpassen – etwa bei Feiertagen, Ferienbeginn oder Großveranstaltungen.
+
+Veranstalter und regionale Entscheidungsträger können mithilfe der täglichen Prognosen die Wirkung von Großevents oder wiederkehrenden Veranstaltungen besser abschätzen. Durch den Vergleich von Prognosen mit und ohne Event-Tagen lässt sich die zusätzliche Nachfrage (Event-Impact) quantifizieren. Diese Erkenntnisse unterstützen sowohl die Begründung von Förderentscheidungen als auch die Wahl optimaler Veranstaltungszeitpunkte, um Synergieeffekte mit bestehenden touristischen Strömen zu nutzen und Überlastungen zu vermeiden.
+
+Tourismusorganisationen und Marketingabteilungen können die Prognosedaten nutzen, um den Erfolg spezifischer Kampagnen quantitativ zu evaluieren. Durch den Abgleich zwischen prognostizierter und tatsächlicher Nächtigungsentwicklung lässt sich bestimmen, ob bestimmte Werbeaktivitäten, Preisaktionen oder Kooperationen überdurchschnittliche Nachfrageeffekte ausgelöst haben. In Verbindung mit den Mobilfunkdaten wird zudem erkennbar, welche Herkunftsmärkte oder Zielgruppen auf Marketingimpulse besonders stark reagieren.
+
+Mit einigen Erweiterungen kann das Modell zudem als Szenariorechnung dienen. So könnten besonders günstige Monate, besonder schöne Tage oder ähnliches in den vergangenen Daten erfasst werden um dann die Prognose mit und ohne diesen günstigen Inputparametern zu erstellen und die Ergebnisse zu vergleichen. So kann beispielsweise überprüft werden, wie sich ein Herbstwochenende bei gutem oder bei schlechtem Wetter entwickelt.
+
 ## Hinweise
 
 Das Projekt wird über das Jahr 2025 im Rahmen einer angestrebten
