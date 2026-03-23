@@ -1,101 +1,101 @@
-reg_id;region_vec;Methode;sample;fwindow;block;lag
-R1;Achensee;normal;long_time;49;13;12
-R2;Alpbachtal und Tiroler Seenland;normal;very_short_time;49;13;24
-R3;Alpenregion Bludenz;mbb;very_short_time;25;49;12
-R4;Arlberg;mbb;short_time;31;13;12
-R5;Ausseerland-Salzkammergut;mbb;very_short_time;37;49;24
-R6;Bad Kleinkirchheim;normal;long_time;49;13;24
-R7;Bodensee-Vorarlberg;normal;very_short_time;25;13;12
-R8;Bregenzerwald;mbb;very_short_time;49;13;24
-R9;Carnica Region Rosental;mbb;very_short_time;31;49;24
-R10;Donau NÖ;mbb;very_short_time;37;49;6
-R11;Donau Oberösterreich;normal;short_time;25;13;24
-R12;Erste Ferienregion im Zillertal;normal;short_time;59;13;24
-R13;Ferienland Kufstein;mbb;very_short_time;37;49;24
-R14;Ferienregion Hohe Salve;mbb;very_short_time;43;49;24
-R15;Ferienregion Nationalpark Hohe Tauern;mbb;long_time;25;49;24
-R16;Fuschlsee;mbb;very_short_time;25;13;24
-R17;Gasteinertal;normal;very_short_time;25;13;24
-R18;Großarltal;mbb;long_time;25;13;24
-R19;Hochkönig;normal;short_time;37;13;12
-R20;Hochsteiermark;mbb;short_time;25;13;12
-R21;Hohe Tauern - die Nationalparkregion in Kärnten;mbb;long_time;31;49;24
-R22;Imst Tourismus;mbb;very_short_time;25;37;24
-R23;Innsbruck und seine Feriendörfer;mbb;very_short_time;31;25;3
-R24;Innviertel-Hausruckwald;mbb;very_short_time;37;37;24
-R25;Kaiserwinkl;mbb;very_short_time;25;49;6
-R26;Kärnten-Mitte;normal;very_short_time;37;13;6
-R27;Katschberg-Rennweg;mbb;very_short_time;31;49;6
-R28;Kitzbühel Tourismus;mbb;very_short_time;25;13;12
-R29;Kitzbüheler Alpen - Brixental;normal;very_short_time;25;13;24
-R30;Kitzbüheler Alpen-St.Johann i.T.;normal;long_time;49;13;24
-R31;Klagenfurt;normal;long_time;37;13;24
-R32;Kleinwalsertal;mbb;short_time;43;49;24
-R33;Klopeiner See - Südkärnten;normal;very_short_time;31;13;12
-R34;Lavanttal;mbb;very_short_time;25;49;24
-R35;Lechtal;normal;short_time;55;13;24
-R36;Lieser- und Maltatal;mbb;short_time;31;49;24
-R37;Linz;mbb;short_time;31;13;12
-R38;Lungau;mbb;short_time;31;49;24
-R39;Mayrhofen;mbb;very_short_time;43;13;24
-R40;Millstätter See;normal;short_time;37;13;12
-R41;Mittelburgenland;mbb;very_short_time;49;13;3
-R42;Montafon;mbb;very_short_time;59;37;12
-R43;Mostviertel;mbb;short_time;25;37;12
-R44;Mühlviertel;mbb;very_short_time;49;49;24
-R45;Nassfeld-Pressegger See Lesachtal Weissensee;normal;very_short_time;49;13;24
-R46;Nationalpark Kalkalpen Region;normal;very_short_time;49;13;24
-R47;Naturparkregion Reutte;normal;long_time;31;13;12
-R49;Nockberge;normal;very_short_time;49;13;24
-R50;Nordburgenland;mbb;short_time;37;13;24
-R51;Obertauern;normal;very_short_time;49;13;12
-R52;Osttirol;normal;very_short_time;31;13;24
-R53;Ötztal Tourismus;mbb;short_time;25;49;12
-R54;Paznaun - Ischgl;normal;long_time;55;13;24
-R55;Pillerseetal;mbb;very_short_time;37;49;12
-R56;Pitztal;mbb;long_time;25;37;24
-R57;Pongau allgemein;mbb;very_short_time;59;37;24
-R58;Pyhrn-Priel;mbb;very_short_time;25;49;12
-R59;Region Graz;mbb;very_short_time;25;37;24
-R60;Region Hall - Wattens;normal;short_time;43;13;24
-R61;Region Villach;mbb;very_short_time;37;13;12
-R62;Saalbach-Hinterglemm;normal;very_short_time;37;13;24
-R63;Saalfelden-Leogang;normal;short_time;31;13;12
-R64;Salzburger Saalachtal;normal;very_short_time;31;13;12
-R65;Salzburger Seenland;mbb;very_short_time;49;49;24
-R66;Salzburger Sonnenterrasse;mbb;short_time;25;49;24
-R67;Salzburger Sportwelt;normal;very_short_time;59;13;24
-R68;Salzkammergut;mbb;very_short_time;31;37;24
-R69;Schladming-Dachstein;mbb;very_short_time;55;49;12
-R70;Seefeld;normal;long_time;43;13;24
-R71;Serfaus-Fiss-Ladis;mbb;very_short_time;37;49;6
-R72;Silberregion Karwendel;mbb;very_short_time;31;13;24
-R73;Sonstige;normal;long_time;25;13;12
-R74;St.Anton am Arlberg;normal;long_time;59;13;24
-R75;Stadt Salzburg;normal;very_short_time;49;13;24
-R76;Stubai Tirol;mbb;long_time;25;13;12
-R77;Südburgenland;mbb;very_short_time;37;37;24
-R78;Süd-Weststeiermark;normal;very_short_time;37;13;12
-R79;Tannheimer Tal;normal;long_time;37;13;12
-R80;Tennengau - Dachstein West;normal;very_short_time;25;13;24
-R81;Tennengebirge;mbb;long_time;31;37;12
-R82;Thermenland Steiermark - Oststeiermark;mbb;short_time;25;49;12
-R83;Tirol West;normal;short_time;31;13;3
-R84;Tiroler Oberland;mbb;long_time;25;25;12
-R85;Tiroler Zugspitz Arena;normal;short_time;37;13;12
-R86;Tux - Finkenberg;mbb;short_time;25;13;12
-R87;Umgebungsorte Salzburg Stadt;mbb;very_short_time;37;49;12
-R88;Urlaubsregion Murtal;mbb;long_time;59;49;24
-R89;Waldviertel;mbb;very_short_time;43;13;12
-R90;Weinviertel;mbb;long_time;25;13;6
-R91;Wien;mbb;short_time;31;49;12
-R92;Wiener Alpen in Niederösterreich;normal;short_time;37;13;12
-R93;Wienerwald;normal;very_short_time;59;13;24
-R94;Wilder Kaiser;mbb;short_time;25;13;24
-R95;Wildschönau;mbb;short_time;31;49;12
-R96;Wipptal;mbb;short_time;31;13;24
-R97;Wolfgangsee;normal;short_time;31;13;24
-R98;Wörthersee;normal;very_short_time;43;13;24
-R99;Zell am See - Kaprun;mbb;very_short_time;43;13;24
-R100;Zell-Gerlos;normal;short_time;59;13;24
-R101;Zentralraum Oberösterreich;normal;very_short_time;49;13;24
+reg_id;region_vec;Methode;sample;fwindow;block;lag;s_window;robust;trend_min
+R1;Achensee;normal;long_time;25;13;24;55;0;1,011430686
+R2;Alpbachtal und Tiroler Seenland;normal;long_time;31;13;24;13;1;1,003780525
+R3;Alpenregion Bludenz;normal;long_time;43;13;12;13;0;1,02110465
+R4;Arlberg;normal;long_time;25;13;24;13;0;0,996998595
+R5;Ausseerland-Salzkammergut;normal;long_time;25;13;24;35;1;1,02577241
+R6;Bad Kleinkirchheim;normal;long_time;37;13;12;25;1;0,979517405
+R7;Bodensee-Vorarlberg;normal;long_time;49;13;12;25;0;1,024223776
+R8;Bregenzerwald;normal;long_time;37;13;12;35;0;1,021391272
+R9;Carnica Region Rosental;normal;long_time;25;13;12;55;0;1,005758795
+R10;Donau NÖ;normal;long_time;25;13;12;35;0;1,034732897
+R11;Donau Oberösterreich;normal;long_time;19;13;12;13;1;1,02046456
+R12;Erste Ferienregion im Zillertal;mbb;long_time;43;37;12;13;1;1,031187244
+R13;Ferienland Kufstein;mbb;long_time;19;13;12;55;0;1,002286524
+R14;Ferienregion Hohe Salve;normal;long_time;19;13;12;55;1;1,021262724
+R15;Ferienregion Nationalpark Hohe Tauern;normal;long_time;25;13;12;13;1;1,033261
+R16;Fuschlsee;normal;long_time;25;13;24;55;1;1,014525636
+R17;Gasteinertal;mbb;long_time;25;25;12;55;0;1,006767566
+R18;Großarltal;normal;long_time;19;13;12;13;0;1,016734545
+R19;Hochkönig;normal;long_time;31;13;24;13;1;1,019179477
+R20;Hochsteiermark;normal;long_time;49;13;12;35;0;1,023173491
+R21;Hohe Tauern - die Nationalparkregion in Kärnten;normal;long_time;19;13;12;55;1;0,99251372
+R22;Imst Tourismus;normal;long_time;49;13;12;13;0;1,007811144
+R23;Innsbruck und seine Feriendörfer;normal;long_time;49;13;12;35;0;1,028782008
+R24;Innviertel-Hausruckwald;normal;long_time;31;13;12;13;0;1,016323413
+R25;Kaiserwinkl;mbb;long_time;49;30;24;55;1;0,988385921
+R26;Kärnten-Mitte;normal;long_time;25;13;12;55;0;1,00649029
+R27;Katschberg-Rennweg;normal;long_time;25;13;24;35;1;1,034046528
+R28;Kitzbühel Tourismus;normal;long_time;19;13;12;13;0;1,012683776
+R29;Kitzbüheler Alpen - Brixental;mbb;long_time;19;25;12;13;1;0,996422899
+R30;Kitzbüheler Alpen-St.Johann i.T.;normal;long_time;19;13;24;55;0;0,994655859
+R31;Klagenfurt;mbb;long_time;31;13;12;13;0;1,026202491
+R32;Kleinwalsertal;mbb;long_time;43;37;12;13;0;0,996699826
+R33;Klopeiner See - Südkärnten;normal;long_time;49;13;12;35;0;0,986132611
+R34;Lavanttal;normal;long_time;37;13;24;35;1;0,985493211
+R35;Lechtal;normal;long_time;37;13;12;35;1;0,997747799
+R36;Lieser- und Maltatal;mbb;long_time;37;30;24;13;1;0,983338029
+R37;Linz;mbb;long_time;43;13;12;13;1;1,040841263
+R38;Lungau;normal;long_time;19;13;12;55;0;1,011310395
+R39;Mayrhofen;mbb;long_time;49;37;12;35;1;1,016914291
+R40;Millstätter See;normal;long_time;43;13;12;13;1;0,99341601
+R41;Mittelburgenland;normal;long_time;43;13;12;55;0;1,050141542
+R42;Montafon;normal;long_time;43;13;12;25;0;0,99462476
+R43;Mostviertel;mbb;long_time;19;25;24;55;1;1,029092577
+R44;Mühlviertel;mbb;long_time;49;37;12;55;0;1,040308339
+R45;Nassfeld-Pressegger See Lesachtal Weissensee;normal;long_time;31;13;12;35;0;1,017341933
+R46;Nationalpark Kalkalpen Region;normal;long_time;19;13;12;13;0;1,003230608
+R47;Naturparkregion Reutte;mbb;long_time;49;30;24;25;0;1,043737161
+R49;Nockberge;normal;long_time;19;13;12;13;1;1,003720955
+R50;Nordburgenland;normal;long_time;19;13;12;25;1;1,008572801
+R51;Obertauern;normal;long_time;25;13;12;55;0;1,023470087
+R52;Osttirol;normal;long_time;37;13;12;55;0;1,0090581
+R53;Ötztal Tourismus;mbb;long_time;31;37;12;25;0;1,022309525
+R54;Paznaun - Ischgl;normal;long_time;49;13;12;55;1;1,013932765
+R55;Pillerseetal;normal;long_time;49;13;12;13;0;1,009876381
+R56;Pitztal;normal;long_time;49;13;12;13;0;0,995125206
+R57;Pongau allgemein;mbb;long_time;19;13;12;55;1;1,004758877
+R58;Pyhrn-Priel;normal;long_time;49;13;12;13;0;1,000075692
+R59;Region Graz;normal;long_time;49;13;24;25;0;1,056534217
+R60;Region Hall - Wattens;normal;long_time;25;13;24;13;1;1,031007983
+R61;Region Villach;mbb;long_time;19;13;12;35;0;1,002329708
+R62;Saalbach-Hinterglemm;normal;long_time;31;13;24;55;1;1,026318999
+R63;Saalfelden-Leogang;mbb;long_time;25;13;12;25;0;1,026798891
+R64;Salzburger Saalachtal;normal;long_time;31;13;24;13;1;1,008172081
+R65;Salzburger Seenland;normal;long_time;25;13;12;25;0;1,019495383
+R66;Salzburger Sonnenterrasse;normal;long_time;25;13;12;35;0;1,025179131
+R67;Salzburger Sportwelt;normal;long_time;31;13;24;35;1;1,021078057
+R68;Salzkammergut;normal;long_time;49;13;12;13;0;1,026684842
+R69;Schladming-Dachstein;normal;long_time;31;13;24;55;0;1,035686098
+R70;Seefeld;normal;long_time;19;13;24;13;0;1,001035195
+R71;Serfaus-Fiss-Ladis;normal;long_time;49;13;12;13;1;1,031392014
+R72;Silberregion Karwendel;normal;long_time;19;13;24;13;0;1,014606208
+R73;Sonstige;normal;long_time;49;13;24;55;0;1,035442447
+R74;St.Anton am Arlberg;normal;long_time;43;13;12;35;1;1,032191687
+R75;Stadt Salzburg;normal;long_time;19;13;12;55;0;1,045569973
+R76;Stubai Tirol;mbb;long_time;49;30;12;25;0;1,009058273
+R77;Südburgenland;normal;long_time;19;13;12;13;0;1,018927295
+R78;Süd-Weststeiermark;normal;long_time;37;13;12;13;0;1,034142092
+R79;Tannheimer Tal;normal;long_time;19;13;12;13;0;1,004159215
+R80;Tennengau - Dachstein West;mbb;long_time;49;25;24;13;0;1,018933897
+R81;Tennengebirge;normal;long_time;49;13;24;13;1;1,005658547
+R82;Thermenland Steiermark - Oststeiermark;normal;long_time;37;13;12;35;1;1,000480469
+R83;Tirol West;mbb;long_time;25;37;12;13;0;1,013602425
+R84;Tiroler Oberland;mbb;long_time;19;25;12;35;0;1,014593507
+R85;Tiroler Zugspitz Arena;normal;long_time;37;13;12;25;1;1,010381381
+R86;Tux - Finkenberg;normal;long_time;19;13;12;35;1;1,007581068
+R87;Umgebungsorte Salzburg Stadt;mbb;long_time;19;30;12;55;0;1,038340804
+R88;Urlaubsregion Murtal;normal;long_time;19;13;12;13;1;1,046861464
+R89;Waldviertel;normal;long_time;31;13;12;13;0;1,03014302
+R90;Weinviertel;mbb;long_time;19;37;12;55;1;1,040952749
+R91;Wien;normal;long_time;43;13;12;13;0;1,062589752
+R92;Wiener Alpen in Niederösterreich;normal;long_time;19;13;12;35;0;1,020312652
+R93;Wienerwald;normal;long_time;19;13;12;35;1;1,04579293
+R94;Wilder Kaiser;normal;long_time;43;13;24;13;1;1,002735355
+R95;Wildschönau;mbb;long_time;31;25;12;13;1;1,017407845
+R96;Wipptal;normal;long_time;25;13;12;35;1;1,006091005
+R97;Wolfgangsee;normal;long_time;43;13;24;55;1;1,025718425
+R98;Wörthersee;normal;long_time;49;13;12;13;0;0,996943914
+R99;Zell am See - Kaprun;mbb;long_time;49;30;12;35;1;1,033649361
+R100;Zell-Gerlos;mbb;long_time;49;13;12;25;1;1,035058566
+R101;Zentralraum Oberösterreich;normal;long_time;19;13;12;55;1;1,040325902
