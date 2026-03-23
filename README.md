@@ -77,6 +77,7 @@ library(fpp3)
 library(data.table)
 library(randomForest) # for randomForest()
 library(tsutils) # for lagmatrix()
+library(zoo)
 
 # for random forest with moving block bootstrap:
 library(rangerts) # https://github.com/hyanworkspace/rangerts # quiet = TRUE to mask c++ compilation messages, optional # devtools::install_github("hyanworkspace/rangerts", quiet = TRUE)
@@ -85,23 +86,6 @@ library(dplyr)
 library(lubridate)
 library(stringr)
 library(glmnet)
-```
-
-In einem nächsten Schritt werden Hilfsfunktionen definiert, die im
-Nachgang verwendet wurden.Für die Tagesprognose wurde eine Funktion zur
-Behandlung von starken Ausreißern erstellt.
-
-``` r
-################################################################
-################## own functions ###############################
-################################################################
-
-trimmed_resid <- function(x){
-  quantiles <- quantile( x, c(.1, .9 ) )
-  x[ x < quantiles[1] ] <- quantiles[1]
-  x[ x > quantiles[2] ] <- quantiles[2]
-  x
-}
 ```
 
 ## Dateninitialisierung
@@ -156,6 +140,10 @@ dummy_fronleichnam <- holidays$Fronleichnam
 dummy_winterbayern <- holidays$winterferien_bayern
 dummy_herbstferien <- holidays$Herbstferien
 dummy_schaltjahr <- holidays$Schaltjahr
+holidays$unique_months <- as.factor(holidays$unique_months)
+easter_pos <- as.factor(holidays$easter_pos)
+dummy_eastermarch <- holidays$oster_maerz %>% as.factor()
+dummy_noeasterapril <- holidays$kein_ostern_april %>% as.factor()
 
 # get events for specific region
 eventframe <- read.csv2("./data/Events_Konzerte_monatlich.csv")
@@ -187,11 +175,13 @@ colnames(daily_output_matrix) <- region_vec
 # load the best parameterization based on extensive gridsearch
 region <- region_vec[i]
 method_sample <- read.csv2("./data/region_method_rmse.csv") 
-usemethod <- method_sample[,3][method_sample$region_vec == region]
-sample <- method_sample[,4][method_sample$region_vec == region]
-fwindow <- method_sample[,5][method_sample$region_vec == region]
-block <- method_sample[,6][method_sample$region_vec == region]
-lagvar <- method_sample[,7][method_sample$region_vec == region]
+  usemethod <- method_sample[,3][method_sample$region_vec == region]
+  sample <- method_sample[,4][method_sample$region_vec == region]
+  fwindow <- method_sample[,5][method_sample$region_vec == region]
+  block <- method_sample[,6][method_sample$region_vec == region]
+  lagvar <- method_sample[,7][method_sample$region_vec == region]
+  swindow <- method_sample[,8][method_sample$region_vec == region]
+  trendmin <- method_sample[,10][method_sample$region_vec == region]
 ```
 
 ## Vorarbeiten
@@ -228,131 +218,51 @@ Out-of-Sample-Prognose.
   x_covid_training <- c(rep(0, 242),rep(1,24),rep(0,24)) # Covid period in the training sample: 01/2020 - 12/2021 (2 years)
 ```
 
-Eine Unterscheidung der regionalen Modelle ist der betrachtete Zeitraum.
-Hier wurden unterschiedliche Spezifikationen getestet: (i) das volle
-Sample von November 1999 bis heute, (ii) ein verringertes Sample ab
-Jänner 2010 sowie (iii) ein deutlich verringertes Sample ab Jänner 2015.
+Das volle Sample der Nächtigungen reicht von November 1999 bis heute.
 
 ``` r
-if(sample == "short_time") { # ab jänner 2010
-  dummy_ostern <- holidays$Ostersonntag
-  dummy_pfingsten <- holidays$Pfingsten
+  dummy_ostern <- holidays$Ostersonntag %>% as.factor()
+  dummy_pfingsten <- holidays$Pfingsten %>% as.factor()
   dummy_feiertage_AT <- holidays$`Freie Tage Österreich`
   dummy_feiertage_DE <- holidays$`Freie Tage Deutschland`
   dummy_feiertage_Rest <- holidays$`Freie Tage Rest`
-  dummy_fronleichnam <- holidays$Fronleichnam
-  dummy_winterbayern <- holidays$semester_bayern
-  dummy_herbstferien <- holidays$Herbstferien
-  dummy_event_l <- eventframe
-  dummy_schaltjahr <- holidays$Schaltjahr
+  dummy_fronleichnam <- holidays$Fronleichnam %>% as.factor()
+  dummy_winterbayern <- holidays$winterferien_bayern %>% as.factor()
+  dummy_herbstferien <- holidays$Herbstferien %>% as.factor()
+  #dummy_event_s <- eventframe_s
+  #dummy_event_m <- eventframe_m
+  dummy_event_l <- eventframe_l %>% as.factor()
+  dummy_schaltjahr <- holidays$Schaltjahr %>% as.factor()
+  bridge_days_weighted <- holidays$bridge_days_weighted
+  unique_months<- holidays$unique_months %>% as.factor()
+  weights<- holidays$weights
+  fourier_term <- holidays$fourier
+  jahr <- holidays$Jahr
+  easter_pos <- holidays$easter_pos %>% as.factor()
+  dummy_eastermarch <- holidays$oster_maerz %>% as.factor()
+  dummy_noeasterapril <- holidays$kein_ostern_april %>% as.factor()
   
-  x_earlyperiod <- c(rep(1, 120),rep(0,8000))
-  x_covid <- c(rep(0, 242),rep(1,24),rep(0,8000)) # Covid period 01/2020 - 12/2021 (2 years)
-  x_postcov <- c(rep(0, 242),rep(0,24),rep(1,12),rep(0,8000)) # Covid recovery period 01/2022 - 12/2022 (1 year)
+  x_earlyperiod <- c(rep(1, 120),rep(0,8000)) %>% as.factor()
+  x_covid <- c(rep(0, 242),rep(1,24),rep(0,8000))  %>% as.factor()# Covid period 01/2020 - 12/2021 (2 years)
+  x_postcov <- c(rep(0, 242),rep(0,24),rep(1,12),rep(0,8000))  %>% as.factor()# Covid recovery period 01/2022 - 12/2022 (1 year)
   
-  # forecast
-  training_set <- region_gesamt[123:308,]#[1:290,] # given the first n observations, forecast the next observation 
-  # forecast
-  dummy_monat <- c(11:12,rep(1:12,27))
-  
-  
-  dummy_ostern <- dummy_ostern[123:nrow(holidays)]#holidays$Ostersonntag
-  dummy_pfingsten <- dummy_pfingsten[123:nrow(holidays)]#holidays$Pfingsten
-  dummy_feiertage_AT <- dummy_feiertage_AT[123:nrow(holidays)]#holidays$`Freie Tage Österreich`
-  dummy_feiertage_DE <- dummy_feiertage_DE[123:nrow(holidays)]#holidays$`Freie Tage Deutschland`
-  dummy_feiertage_Rest <- dummy_feiertage_Rest[123:nrow(holidays)]#holidays$`Freie Tage Rest`
-  dummy_fronleichnam <- dummy_fronleichnam[123:nrow(holidays)]#holidays$`Ferien Monatsgrenze`
-  dummy_winterbayern <- dummy_winterbayern[123:nrow(holidays)]#holidays$semester_bayern
-  dummy_herbstferien <- dummy_herbstferien[123:nrow(holidays)]
-  dummy_event_l <-dummy_event_l[123:nrow(holidays)]
-  dummy_schaltjahr <- dummy_schaltjahr[123:nrow(holidays)]
-  
-  dummy_monat <- c(rep(1:12,27))#c(11:12,rep(1:12,25))
-  
-  # dummys for exlcuding early periods
-  x_earlyperiod <- x_earlyperiod[123:8120]#c(rep(1, 120),rep(0,8000))
-  x_covid <- x_covid[123:8120]#c(rep(0, 242),rep(1,24),rep(0,8000)) # Covid period 01/2020 - 12/2021 (2 years)
-  x_postcov <- x_postcov[123:8120]#c(rep(0, 242),rep(0,24),rep(1,12),rep(0,8000)) # Covid recovery period 01/2022 - 12/2022 (1 year)
-  
-  
-} else if(sample == "very_short_time") { # ab jänner 2015
-  dummy_ostern <- holidays$Ostersonntag
-  dummy_pfingsten <- holidays$Pfingsten
-  dummy_feiertage_AT <- holidays$`Freie Tage Österreich`
-  dummy_feiertage_DE <- holidays$`Freie Tage Deutschland`
-  dummy_feiertage_Rest <- holidays$`Freie Tage Rest`
-  dummy_fronleichnam <- holidays$Fronleichnam
-  dummy_winterbayern <- holidays$semester_bayern
-  dummy_herbstferien <- holidays$Herbstferien
-  dummy_event_l <- eventframe
-  dummy_schaltjahr <- holidays$Schaltjahr
-  
-  x_earlyperiod <- c(rep(1, 120),rep(0,8000))
-  x_covid <- c(rep(0, 242),rep(1,24),rep(0,8000)) # Covid period 01/2020 - 12/2021 (2 years)
-  x_postcov <- c(rep(0, 242),rep(0,24),rep(1,12),rep(0,8000)) # Covid recovery period 01/2022 - 12/2022 (1 year)
-  
-  # forecast
-  training_set <- region_gesamt[183:308,]#[1:290,] # given the first n observations, forecast the next observation 
-  # forecast
-  dummy_monat <- c(11:12,rep(1:12,27))
-  
-  
-  dummy_ostern <- dummy_ostern[183:nrow(holidays)]#holidays$Ostersonntag
-  dummy_pfingsten <- dummy_pfingsten[183:nrow(holidays)]#holidays$Pfingsten
-  dummy_feiertage_AT <- dummy_feiertage_AT[183:nrow(holidays)]#holidays$`Freie Tage Österreich`
-  dummy_feiertage_DE <- dummy_feiertage_DE[183:nrow(holidays)]#holidays$`Freie Tage Deutschland`
-  dummy_feiertage_Rest <- dummy_feiertage_Rest[183:nrow(holidays)]#holidays$`Freie Tage Rest`
-  dummy_fronleichnam <- dummy_fronleichnam[183:nrow(holidays)]#holidays$`Ferien Monatsgrenze`
-  dummy_winterbayern <- dummy_winterbayern[183:nrow(holidays)]#holidays$semester_bayern
-  dummy_herbstferien <- dummy_herbstferien[183:nrow(holidays)]
-  dummy_event_l <-dummy_event_l[183:nrow(holidays)]
-  dummy_schaltjahr <- dummy_schaltjahr[183:nrow(holidays)]
-
-  
-  dummy_monat <- c(rep(1:12,27))#c(11:12,rep(1:12,25))
-  
-  # dummys for exlcuding early periods
-  x_earlyperiod <- x_earlyperiod[183:8120]#c(rep(1, 120),rep(0,8000))
-  x_covid <- x_covid[183:8120]#c(rep(0, 242),rep(1,24),rep(0,8000)) # Covid period 01/2020 - 12/2021 (2 years)
-  x_postcov <- x_postcov[183:8120]#c(rep(0, 242),rep(0,24),rep(1,12),rep(0,8000)) # Covid recovery period 01/2022 - 12/2022 (1 year)
-  
-  
-} else if(sample == "long_time") {
-  dummy_ostern <- holidays$Ostersonntag
-  dummy_pfingsten <- holidays$Pfingsten
-  dummy_feiertage_AT <- holidays$`Freie Tage Österreich`
-  dummy_feiertage_DE <- holidays$`Freie Tage Deutschland`
-  dummy_feiertage_Rest <- holidays$`Freie Tage Rest`
-  dummy_fronleichnam <- holidays$Fronleichnam
-  dummy_winterbayern <- holidays$semester_bayern
-  dummy_herbstferien <- holidays$Herbstferien
-  dummy_event_l <- eventframe
-  dummy_schaltjahr <- holidays$Schaltjahr
-  
-  x_earlyperiod <- c(rep(1, 120),rep(0,8000))
-  x_covid <- c(rep(0, 242),rep(1,24),rep(0,8000)) # Covid period 01/2020 - 12/2021 (2 years)
-  x_postcov <- c(rep(0, 242),rep(0,24),rep(1,12),rep(0,8000)) # Covid recovery period 01/2022 - 12/2022 (1 year)
-  
-  # forecast
   training_set <- region_gesamt[1:308,]#[1:290,]
   # forecast
-  dummy_monat <- c(11:12,rep(1:12,27))
+  dummy_monat <- c(11:12,rep(1:12,28))
   
 }  
 ```
 
 ## Prognosen
 
-Für die Monatsprognose wurden vier unterschiedliche Modelle definiert.
+Für die Monatsprognose wurden zwei leicht unterschiedliche Modelle definiert.
 Einerseits wurde ein klassischer Random Forest nach Breiman (2001)
 betrachtet, andererseits wurde eine Spezifikation gewählt, die das
 Bootstrapping der Methode modifiziert, um die serielle Korrelation der
-Zeitreihe besser abzufangen. Diese beiden Verfahren wurden dann jeweils
-auf zwei unterschiedliche Arten betrachtet. Einerseits wurde die „rohe“
-Zeitreihe verwendet, um eine Prognose zu erstellen, andererseits wurde
-die Zeitreihe unter Verwendung von STL (Saison-Trend-Dekomposition
+Zeitreihe besser abzufangen. Diese beiden Verfahren wurden dann unter
+Verwendung von STL (Saison-Trend-Dekomposition
 mittels Loess) nach Cleveland et al. (1990) trendbereinigt. Beim
-letzteren Ansatz wird der Trend separat über exponentielle Glättung
+diesem Ansatz wird der Trend separat über exponentielle Glättung
 vorhergesagt, während der Random Forest die verbliebene Zeitreihe
 vorhersagt – die beiden Komponenten werden anschließend zur Prognose
 zusammengeführt.
@@ -376,6 +286,10 @@ Komponenten trainiert wird. Der Trend wird dann separat prognostiziert,
 indem die Methode der exponentiellen Glättung ohne eine saisonale
 Komponente auf die Daten angewendet wird.
 
+Um das Endwertproblem der Zerlegung zu adressieren, kann entweder eine simple
+Vorrausschätzung vorngenommen werden (Holt-Winters) oder eine saisonal-naive
+Zeitreihenprognose vorgenommen werden (beide Varianten sind in diesem Code vorhanden).
+
 ``` r
 # forecasting horizon (in months):
 H <- 12
@@ -389,9 +303,17 @@ hw_forecast <- predict(hwmodel, n.ahead = 36)
 
 hw_forecast <- as_tsibble(hw_forecast)
 colnames(hw_forecast) <- c("Monat","Anzahl")
+x_tmp <- c(tail(training_set$Anzahl,12))
+for(yx in 1:36){
+  x_tmp <- c(x_tmp, trendmin * x_tmp[length(x_tmp) - 11])
+}
 
+hw_forecast$Anzahl <- x_tmp[13:48]
 
-dcmp_set <- bind_rows(training_set,hw_forecast) %>% stl(t.window=fwindow, s.window="periodic", robust=TRUE)#|> model(stl = STL(Anzahl))# 
+robust_decomp <- method_sample[,9][method_sample$region_vec == region]
+if(robust_decomp==1) {rob <- T} else {rob <- F}
+
+dcmp_set <- bind_rows(training_set,hw_forecast) %>% stl(t.window=fwindow, s.window="periodic", robust=rob)#|> model(stl = STL(Anzahl))# 
 dcmp_training_set <- dcmp_set$time.series %>% window(end= c(year(ymd("2025-06-01")),month(ymd("2025-06-01"))))
 trend_training_set <- dcmp_training_set[,2]#dcmp_training_set[[1]][[1]][["fit"]][["decomposition"]][["trend"]]
 trend_forecast <- (trend_training_set |> forecast(h=12))
@@ -434,7 +356,7 @@ if(usemethod %in% c('detrend_normal','normal')) {
   
   # create training set (dependent variable and matrix of explanatory variables)
   ytilde_training <- ytilde_lags[(p+1):n,1]
-  x_training <- cbind(ytilde_lags[(p+1):n,2:(p+1)], # first p lags of y
+  x_train_df <- cbind(ytilde_lags[(p+1):n,2:(p+1)], # first p lags of y
                       x_covid[(p+1):n], # indicator covid period
                       season_training_set[p:(n-1)], # season component of first lag
                       dummy_monat[(p+1):n], # indicator current month
@@ -446,15 +368,26 @@ if(usemethod %in% c('detrend_normal','normal')) {
                       dummy_herbstferien[(p+1):n],
                       dummy_winterbayern[(p+1):n],
                       dummy_event_l[(p+1):n],
+                      x_postcov[(p+1):n],
+                      jahr[(p+1):n],
+                      dummy_eastermarch[(p+1):n],
+                      dummy_noeasterapril[(p+1):n],
                       dummy_schaltjahr[(p+1):n])
-  
+
+  x_train_df <- x_train_df %>% setNames(paste0("X", seq_along(.)))
   # set a seed and fit the random forest:
   set.seed(1) 
-  classifier = randomForest(y = ytilde_training,
-                            x = x_training,
-                            importance = TRUE, 
-                            replace = TRUE,
-                            ntree=1000) 
+  classifier <- rangerts::rangerts(ytilde_training ~ ., data = x_train_df, #+ X16:X17
+                                   num.trees = 15000,
+                                   mtry = max(floor(ncol(x_train_df)/3), 1),
+                                   case.weights = weights[(p+1):n],
+                                   always.split.variables = colnames(x_train_df[c((p+1),(p+12),(p+15))]),
+                                   sample.fraction = 0.8,
+                                   replace = FALSE,
+                                   num.random.splits = 5,
+                                   splitrule = "extratrees",
+                                   min.node.size = 2,
+                                   seed = 1)
   
   
   
@@ -469,7 +402,7 @@ if(usemethod %in% c('detrend_normal','normal')) {
     
     
     # create matrix of explanatory variables for the one-step ahead forecast:
-    x_test <- cbind(t(ytilde_lags[n,1:p]), # most recent observation and its first p-1 lags
+    x_test_df <- cbind(t(ytilde_lags[n,1:p]), # most recent observation and its first p-1 lags
                     x_covid[n+1], # indicator covid period for current time point
                     season_training_set[n], # season component of most recent observation
                     dummy_monat[n+1], # indicator current month
@@ -481,11 +414,15 @@ if(usemethod %in% c('detrend_normal','normal')) {
                     dummy_herbstferien[n+1],
                     dummy_winterbayern[n+1],
                     dummy_event_l[n+1],
+                    x_postcov[n+1],
+                    jahr[n+1],
+                    dummy_eastermarch[n+1],
+                    dummy_noeasterapril[n+1],
                     dummy_schaltjahr[n+1])
 
-    
+    x_test_df <- x_test_df %>% setNames(paste0("X", seq_along(.)))
     # one-step ahead forecast of detrended time series:
-    ytilde_forecast <- predict(classifier, newdata = x_test)
+    ytilde_forecast <- predict(classifier, newdata = x_test_df)$predictions
     
     
     # combine both forecasts:
@@ -544,20 +481,30 @@ if(usemethod %in% c('detrend_mbb','mbb')) {
                       dummy_herbstferien[(p+1):n],
                       dummy_winterbayern[(p+1):n],
                       dummy_event_l[(p+1):n],
+                      x_postcov[(p+1):n],
+                      jahr[(p+1):n],
+                      dummy_eastermarch[(p+1):n],
+                      dummy_noeasterapril[(p+1):n],
                       dummy_schaltjahr[(p+1):n])
 
-  
+  x_train_df <- x_train_df %>% setNames(paste0("X", seq_along(.)))
   # set a seed and fit the random forest:
   set.seed(1) 
 
   
-  rf_mbb <- rangerts::rangerts(ytilde_training ~ ., data = data.frame(x_training),
-                               num.trees = 100,
-                               mtry = max(floor(ncol(x_training)/3), 1),
-                               replace = TRUE,
-                               seed = 1,
-                               bootstrap.ts = "moving",
-                               block.size = block) 
+    classifier <- rangerts::rangerts(ytilde_training ~ ., data = x_train_df, #+ X16:X17
+                                   num.trees = 15000,
+                                   mtry = max(floor(ncol(x_train_df)/3), 1),
+                                   case.weights = weights[(p+1):n],
+                                   always.split.variables = colnames(x_train_df[c((p+1),(p+12),(p+15))]),
+                                   sample.fraction = 0.8,
+                                   replace = FALSE,
+                                   num.random.splits = 5,
+                                   min.node.size = 2,
+                                   seed = 1,
+                                   splitrule = "extratrees",
+                                   bootstrap.ts = "moving",
+                                   block.size = block)
   
  
   
@@ -583,11 +530,16 @@ if(usemethod %in% c('detrend_mbb','mbb')) {
                     dummy_herbstferien[n+1],
                     dummy_winterbayern[n+1],
                     dummy_event_l[n+1],
+                    x_postcov[n+1],
+                    jahr[n+1],
+                    dummy_eastermarch[n+1],
+                    dummy_noeasterapril[n+1],
                     dummy_schaltjahr[n+1])
     
     # one-step ahead forecast of detrended time series:
+    x_test_df <- x_test_df %>% setNames(paste0("X", seq_along(.)))
 
-    ytilde_forecast <- predict(rf_mbb, data = data.frame(x_test))$predictions
+    ytilde_forecast <- predict(rf_mbb, data = x_test_df)$predictions
     
 
     
@@ -653,7 +605,8 @@ integriert.
 Die Rohdaten wurden in einem vorgelagerten Schritt erstellt um diese in
 weiterer Folge bedenkenlos zur Verfügung stellen zu können. Dazu wurden
 diese Daten aus einer Linearkombination aus ausgewählten Daten von
-Feratel und Mobilfunkdaten von Drei und A1/Invenium erstellt.
+Feratel und Mobilfunkdaten von Drei und A1/Invenium sowie kalendarsichen
+Effekten erstellt.
 
 ``` r
 x_m <- prognose
@@ -661,6 +614,7 @@ x_m <- prognose
 
 # read whole data set (saved as .csv file):
 data_proxy <- read.csv2("./data/proxy_data_daily.csv")
+maxbeds <- read.csv2("./data_input/bettenkapazität.csv")
 
 regselect = region
 
@@ -668,6 +622,10 @@ regselect = region
 data_proxy <- data_proxy |>
   filter(Region == regselect) |>
   select(-Region,-Regionsnummer)
+
+maxbeds <- maxbeds |>
+  filter(region_vec == regselect)|>
+  select(-reg_id,-region_vec)
 ```
 
 ### Das Schätzverfahren
@@ -680,7 +638,7 @@ große Rolle für die Nächtigungen spielen, allen voran die Urlaubsregion
 Murtal mit dem Red Bull Ring in Spielberg.
 
 ``` r
-D <- as.matrix(read.csv2("./data/matrix_daily_forecast.csv")[1:1096,3:115])#87/698
+D <- as.matrix(read.csv2("./data/matrix_daily_forecast.csv")[1:1096,3:147])#87/698
 
 D <- cbind(D,daily_events_s[1:1096,i+1],daily_events_m[1:1096,i+1],daily_events_l[1:1096,i+1]) #698
 
@@ -709,37 +667,66 @@ spezifisch reguliert – dieser Gewichtevektor wird dabei aus einer
 initialen OLS-Regression gewonnen.
 
 ``` r
-best_coef <- as.numeric(coef(lm(data_proxy$time_series ~ D[,13:ncol(D)])))[-1]
-best_coef[is.na(best_coef)] <- 0
+y <- data_proxy$time_series[1:1461]
+D_nonzero <- D[, colSums(abs(D)) != 0]
+keep_cols <- colSums(abs(D[,13:ncol(D)])) != 0
+X <- cbind(D_nonzero[,13:ncol(D_nonzero)])
 
-#perform k-fold cross-validation to find optimal lambda value
-cv_model <- cv.glmnet(D[,13:ncol(D)], data_proxy$time_series,alpha = 1, intercept = TRUE,family="gaussian",penalty.factor = 1 / abs(best_coef))
 
-#find optimal lambda value that minimizes test MSE
-best_lambda <- cv_model$lambda.min
-best_lambda
+# -------------------------
+# 1. OLS Initial Estimator
+# -------------------------
+
+ols <- lm(y ~ X)
+beta_ols <- coef(ols)[-1]
+
+
+# -------------------------
+# 2. Adaptive weights
+# -------------------------
+
+gamma <- 1
+
+w <- 1 / (abs(beta_ols)^gamma)
+
+
+# -------------------------
+# 3. Adaptive Lasso
+# -------------------------
+
+set.seed(1)
+
+cv_adalasso <- cv.glmnet(
+  X, y,
+  alpha = 1,
+  family = "gaussian",
+  intercept = TRUE,
+  penalty.factor = w
+)
+
+best_lambda <- cv_adalasso$lambda.min
+
+# -------------------------
+# 4. Final Model
+# -------------------------
+
+adalasso_model <- glmnet(
+  X, y,
+  alpha = 1,
+  lambda = best_lambda,
+  family = "gaussian",
+  intercept = TRUE,
+  penalty.factor = w
+)
+
+coef_vec <- as.vector(coef(adalasso_model))#[-1]
+
+coef_model <- coef(adalasso_model)[,1]
+coef_full <- numeric(ncol(D[,13:ncol(D)]))
+coef_full[keep_cols] <- coef_model[-1] 
+
+
 ```
-
-    ## [1] 245.9982
-
-``` r
-model <- glmnet(D[,13:ncol(D)], data_proxy$time_series,alpha = 1, lambda=best_lambda, intercept = TRUE,family="gaussian",penalty.factor = 1 / abs(best_coef))
-summary(model)
-```
-
-    ##           Length Class     Mode   
-    ## a0          1    -none-    numeric
-    ## beta      110    dgCMatrix S4     
-    ## df          1    -none-    numeric
-    ## dim         2    -none-    numeric
-    ## lambda      1    -none-    numeric
-    ## dev.ratio   1    -none-    numeric
-    ## nulldev     1    -none-    numeric
-    ## npasses     1    -none-    numeric
-    ## jerr        1    -none-    numeric
-    ## offset      1    -none-    logical
-    ## call        8    -none-    call   
-    ## nobs        1    -none-    numeric
 
 Nachfolgend werden die geschätzten Koeffizienten des Modells
 dargestellt. Ein Punkt bedeutet dabei, dass die Parameter aus dem Modell
@@ -747,7 +734,7 @@ dargestellt. Ein Punkt bedeutet dabei, dass die Parameter aus dem Modell
 signifikant sind.
 
 ``` r
-coef(model)
+coef(adalasso_model)
 ```
 
     ## 111 x 1 sparse Matrix of class "dgCMatrix"
@@ -864,17 +851,6 @@ coef(model)
     ## lead_m                      .      
     ## lead_l                      .
 
-Um Tageseffekte, die vom Modell möglicherweise nicht getroffen werden,
-integrieren zu können, wird ein kleiner Bestandteil (ausreißerbereinigt)
-des Schätzfehlers für das Datum (Tag und Monat) mitgeführt.
-
-``` r
-# Add residuals to data set:
-u <- data_proxy$time_series-predict(model, s=best_lambda, newx = D[,13:ncol(D)]) #model$residuals
-data_proxy$u <- u
-
-data_proxy$u <- trimmed_resid(data_proxy$u)
-```
 
 Daraufhin wird die Disaggregation der Monatsprognose vorbereitet.
 Relevante Zeiträume werden definiert und die Fehlerterme werden den
@@ -904,17 +880,6 @@ tdates_dm <- paste(str_pad(day(tdates), 2, pad = "0"),
 tdates_fp_dm <- paste(str_pad(day(tdates_fp), 2, pad = "0"),
                       str_pad(month(tdates_fp), 2, pad = "0"),
                       sep = ".")
-
-for(idnr in 1:365){ 
-  if(daily_forecasts$forecast_period[idnr] %>% dmy() %>% month() == 12 || daily_forecasts$forecast_period[idnr] %>% dmy() %>% month() == 1 ) {
-    temp <- data_proxy$u[tdates_dm == tdates_fp_dm[idnr]] # could contain zero, one, or more than one element
-  } else if(daily_forecasts$forecast_period[idnr] %>% dmy() %>% day() < 6 || daily_forecasts$forecast_period[idnr] %>% dmy() %>% day() > 24 ) {
-    temp <- data_proxy$u[tdates_dm == tdates_fp_dm[idnr]]/2 # could contain zero, one, or more than one element
-  } else {temp <- data_proxy$u[tdates_dm == tdates_fp_dm[idnr]]/3}
-  if(length(temp) > 0){
-    daily_forecasts$forecasts[idnr] <- mean(temp)#temp[length(temp)]#trimmed_resid(temp[length(temp)])
-  } # else: still NA
-}
 ```
 
 Im nächsten Schritt wird analog zur vorherigen Datenmatrix eine Matrix
@@ -929,7 +894,7 @@ rowdate1 <- tmpcheck1[tmpcheck1$date==as.Date(last_available_date %m+% months(1)
 tmpcheck2 <- read.csv2("./data/matrix_daily_forecast.csv")[,1:2]
 tmpcheck2$date <- as.Date(tmpcheck2$date,format="%d.%m.%Y")
 rowdate2 <- tmpcheck2[tmpcheck2$date==as.Date(last_available_date %m+% months(13)-1),1]#1096
-D_fp <- as.matrix(read.csv2("./data/matrix_daily_forecast.csv")[rowdate1:rowdate2,3:115])
+D_fp <- as.matrix(read.csv2("./data/matrix_daily_forecast.csv")[rowdate1:rowdate2,3:147])
 
 D_fp <- cbind(D_fp,daily_events_s[rowdate1:rowdate2,i+1],daily_events_m[rowdate1:rowdate2,i+1],daily_events_l[rowdate1:rowdate2,i+1])
 
@@ -944,31 +909,41 @@ lead_l <- daily_events_l[rowdate1:rowdate2,i+1] %>% lead() %>% replace(is.na(.),
 D_fp <- cbind(D_fp,lag_s, lag_m, lag_l, lead_s,lead_m,lead_l)
 
 class(D_fp) <- "numeric"
+D_fp <- D_fp[, colSums(abs(D)) != 0]
 ```
 
 Anschließend werden die geschätzten Effekte auf die zu
 prognostizierenden Tage aufgerechnet, wobei die Datenmatrix die Effekte
-definiert.
+definiert. Zudem werden Scale und Center herangezogen, um von der normierten
+Zeitreihe auf eine interpretierbare Größe der Nächtigungen hochzurechnen.
 
 ``` r
-# Add dummy effects:
-coeffs <- as.matrix(model$beta)
-daily_forecasts$forecasts <- daily_forecasts$forecasts + model$a0
+daily_forecasts$forecasts <- 0
+daily_forecasts$forecasts[1] <-  coef_vec[1] + sum(coef_vec[2:(length(coef_vec))]*D_fp[1,13:(ncol(D_nonzero))])
 
 
-for(idnr in 1:365){
-  for (j in 1:length(coeffs)) {
-    if(D_fp[idnr,12+j] == 1) {
-      daily_forecasts$forecasts[idnr] <-daily_forecasts$forecasts[idnr] + coeffs[j] 
-    }
-  }
+T = 365
+
+for(t in 2:T){
+  
+  lin_part <- coef_vec[1] + sum(coef_vec[2:(length(coef_vec))]*D_fp[t,13:(ncol(D_nonzero))])
+  
+  daily_forecasts$forecasts[t] <- lin_part 
 }
+
+region_scale <- read.csv2("data_input/region_scale_13032026.csv", encoding = "latin1")
+reg_scale <- region_scale %>% filter(Region == regselect) %>% select(year)
+reg_center <- x_m %>% sum()/365
+
+daily_forecasts$forecasts <- (daily_forecasts$forecasts*reg_scale[[1]])+reg_center
+daily_forecasts$forecasts <- daily_forecasts$forecasts - min(min(daily_forecasts$forecasts),0)
 ```
 
 ### Die Glättung
 
 Der letzte Schritt betrifft die Glättung der Ergebnisse, um die
-Konsistenz der täglichen Werte mit der Monatsprognose zu gewährleisten.
+Konsistenz der täglichen Werte mit der Monatsprognose zu gewährleisten
+und das Bettenmaximum der Region nicht zu überschreiben.
 Die Prüfsumme wird ausgegeben und sollte null sein (oder ein minimaler
 Wert im hinteren Kommabereich aufgrund von Rundungsdifferenzen).
 
@@ -976,6 +951,37 @@ Wert im hinteren Kommabereich aufgrund von Rundungsdifferenzen).
 # get running index
 rndx <- 12-lubridate::month(last_available_date)+1
 
+adjust_month_simple <- function(f, target_sum, B) {
+  
+  # 1 negative Werte verhindern
+  f <- pmax(f, 0.0001)
+  
+  # 2 Falls alles 0 ist → gleich verteilen
+  if(sum(f) == 0){
+    y <- rep(target_sum/length(f), length(f))
+    return(pmin(y, B))
+  }
+  
+  # 3 naive proportionale Skalierung
+  y <- f * (target_sum / sum(f))
+  
+  # 4 Kapazitätslimit
+  y <- pmin(y, B)
+  
+  # 5 falls durch truncation Summe zu klein wird → erneut skalieren
+  if(sum(y) != target_sum){
+    
+    free_idx <- y < B
+    
+    if(any(free_idx)){
+      rest <- target_sum - sum(y[!free_idx])
+      y[free_idx] <- y[free_idx] * (rest / sum(y[free_idx]))
+    }
+    
+  }
+  
+  return(y)
+}
 
 
 for(idnr in 1:12){
@@ -1019,11 +1025,24 @@ for(idnr in 1:12){
     j = if(rndx+11<13) {rndx+11} else {rndx+11-12}#3
   }
 
-
+  # approach 1:
+  # add procedure for extremes
   daily_forecasts$forecasts <- zoo::na.locf(daily_forecasts$forecasts)
-  daily_forecasts$forecasts[idx] <- pmax(daily_forecasts$forecasts[idx]*(x_m[j]/sum(daily_forecasts$forecasts[idx],na.rm=TRUE)),rep(0,length(daily_forecasts$forecasts[idx])), na.rm = T)
+  #daily_forecasts$forecasts[idx] <- pmax(daily_forecasts$forecasts[idx]*(x_m[j]/sum(daily_forecasts$forecasts[idx],na.rm=TRUE)),rep(0,length(daily_forecasts$forecasts[idx])), na.rm = T)
+  #add maxbed
+  #daily_forecasts$forecasts[idx] <- pmin(daily_forecasts$forecasts[idx]*(x_m[j]/sum(daily_forecasts$forecasts[idx],na.rm=TRUE)),rep(maxbeds[[1]],length(daily_forecasts$forecasts[idx])), na.rm = T)
+  # trial
+  #daily_forecasts$forecasts[idx] <- (daily_forecasts$forecasts[idx]*.9 + mean(daily_forecasts$forecasts[idx])*.1)
+  #daily_forecasts$forecasts[idx] <- daily_forecasts$forecasts[idx]*(x_m[j]/sum(daily_forecasts$forecasts[idx],na.rm=TRUE))
+  # approach 2:
+  daily_forecasts$forecasts[idx] <- adjust_month_simple(
+    f = daily_forecasts$forecasts[idx],
+    target_sum = x_m[j],
+    B = maxbeds[[1]]
+    #gamma = 1.1
+  )
   
-  daily_forecasts$forecasts[idx] <- daily_forecasts$forecasts[idx]*(x_m[j]/sum(daily_forecasts$forecasts[idx],na.rm=TRUE))
+
 }
 print(sum(x_m)- sum(daily_forecasts$forecasts, na.rm = T))
 ```
@@ -1083,8 +1102,9 @@ Mit einigen Erweiterungen kann das Modell zudem als Szenariorechnung dienen. So 
 
 ## Hinweise
 
-Das Projekt wird über das Jahr 2025 im Rahmen einer angestrebten
-Publikation konstant bearbeitet und ist kleineren Änderungen und
+Eine Beschreibung des monatlichen Forecasting wurde von Karsten Reichold publiziert und ist hier zu finden: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5494688
+Das Projekt wird zudem über das Jahr 2026 im Rahmen eines weiteren angestrebten
+Papers konstant bearbeitet und ist kleineren Änderungen und
 Anpassungen unterworfen. Die Daten werden monatlich upgedated und sind
 über folgende Schnittstellen abrufbar:
 <https://naechtigungen.pol.joanneum.at/docs#/>. Bei Fragen posten Sie
