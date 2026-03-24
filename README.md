@@ -112,21 +112,21 @@ Events und Konzerte geladen.
 ################################################################
 
 # read whole data set (saved as .csv file):
-data <- read.csv2("./data/monthly_stays.csv")
+data <- read.csv2("./data/monthly_stays.csv", encoding="latin1")
 
 
 # read additional data file containing holidays (saved as .csv file):
-holidays <- read.csv2("./data/Ferien_und_Feiertage.csv")
+holidays <- read.csv2("./data/Ferien_und_Feiertage.csv", encoding="latin1")
 
-daily_events_s <- read.csv2("./data/Events_Konzerte_daily_K.csv")
+daily_events_s <- read.csv2("./data/Events_Konzerte_daily_K.csv", encoding="latin1")
 daily_events_s[is.na(daily_events_s)] <- ""
 daily_events_s[,-1][daily_events_s[-1]!=""] <- 1
 daily_events_s[,-1][daily_events_s[-1]==""] <- 0
-daily_events_m <- read.csv2("./data/Events_Konzerte_daily_M.csv")
+daily_events_m <- read.csv2("./data/Events_Konzerte_daily_M.csv", encoding="latin1")
 daily_events_m[is.na(daily_events_m)] <- ""
 daily_events_m[,-1][daily_events_m[-1]!=""] <- 1
 daily_events_m[,-1][daily_events_m[-1]==""] <- 0
-daily_events_l <- read.csv2("./data/Events_Konzerte_daily_G.csv")
+daily_events_l <- read.csv2("./data/Events_Konzerte_daily_G.csv", encoding="latin1")
 daily_events_l[is.na(daily_events_l)] <- ""
 daily_events_l[,-1][daily_events_l[-1]!=""] <- 1
 daily_events_l[,-1][daily_events_l[-1]==""] <- 0
@@ -146,9 +146,9 @@ dummy_eastermarch <- holidays$oster_maerz %>% as.factor()
 dummy_noeasterapril <- holidays$kein_ostern_april %>% as.factor()
 
 # get events for specific region
-eventframe <- read.csv2("./data/Events_Konzerte_monatlich.csv")
-eventframe[is.na(eventframe)] <- 0
-eventframe <- eventframe[,i+3]
+eventframe_l <- read.csv2("./data/Events_Konzerte_monatlich.csv", encoding="latin1")
+eventframe_l[is.na(eventframe_l)] <- 0
+eventframe_l <- eventframe_l[,i+3]
 ```
 
 Auch Hilfstabellen wurden erstellt, um die Ergebnisse der folgenden
@@ -223,9 +223,9 @@ Das volle Sample der Nächtigungen reicht von November 1999 bis heute.
 ``` r
   dummy_ostern <- holidays$Ostersonntag %>% as.factor()
   dummy_pfingsten <- holidays$Pfingsten %>% as.factor()
-  dummy_feiertage_AT <- holidays$`Freie Tage Österreich`
-  dummy_feiertage_DE <- holidays$`Freie Tage Deutschland`
-  dummy_feiertage_Rest <- holidays$`Freie Tage Rest`
+  dummy_feiertage_AT <- holidays$`Freie.Tage.Österreich`
+  dummy_feiertage_DE <- holidays$`Freie.Tage.Deutschland`
+  dummy_feiertage_Rest <- holidays$`Freie.Tage.Rest`
   dummy_fronleichnam <- holidays$Fronleichnam %>% as.factor()
   dummy_winterbayern <- holidays$winterferien_bayern %>% as.factor()
   dummy_herbstferien <- holidays$Herbstferien %>% as.factor()
@@ -250,22 +250,21 @@ Das volle Sample der Nächtigungen reicht von November 1999 bis heute.
   # forecast
   dummy_monat <- c(11:12,rep(1:12,28))
   
-}  
+  
 ```
 
 ## Prognosen
 
-Für die Monatsprognose wurden zwei leicht unterschiedliche Modelle definiert.
-Einerseits wurde ein klassischer Random Forest nach Breiman (2001)
-betrachtet, andererseits wurde eine Spezifikation gewählt, die das
-Bootstrapping der Methode modifiziert, um die serielle Korrelation der
-Zeitreihe besser abzufangen. Diese beiden Verfahren wurden dann unter
-Verwendung von STL (Saison-Trend-Dekomposition
-mittels Loess) nach Cleveland et al. (1990) trendbereinigt. Beim
-diesem Ansatz wird der Trend separat über exponentielle Glättung
-vorhergesagt, während der Random Forest die verbliebene Zeitreihe
-vorhersagt – die beiden Komponenten werden anschließend zur Prognose
-zusammengeführt.
+Für die Monatsprognose wurden zwei leicht unterschiedliche Modelle
+definiert. Einerseits wurde ein klassischer Random Forest nach Breiman
+(2001) betrachtet, andererseits wurde eine Spezifikation gewählt, die
+das Bootstrapping der Methode modifiziert, um die serielle Korrelation
+der Zeitreihe besser abzufangen. Diese beiden Verfahren wurden dann
+unter Verwendung von STL (Saison-Trend-Dekomposition mittels Loess) nach
+Cleveland et al. (1990) trendbereinigt. Beim diesem Ansatz wird der
+Trend separat über exponentielle Glättung vorhergesagt, während der
+Random Forest die verbliebene Zeitreihe vorhersagt – die beiden
+Komponenten werden anschließend zur Prognose zusammengeführt.
 
 Neben den offiziellen Nächtigungsstatistiken und kalendarischen Effekten
 spielen auch Verzögerungsterme (lags) der Zeitreihe und ihrer
@@ -286,9 +285,10 @@ Komponenten trainiert wird. Der Trend wird dann separat prognostiziert,
 indem die Methode der exponentiellen Glättung ohne eine saisonale
 Komponente auf die Daten angewendet wird.
 
-Um das Endwertproblem der Zerlegung zu adressieren, kann entweder eine simple
-Vorrausschätzung vorngenommen werden (Holt-Winters) oder eine saisonal-naive
-Zeitreihenprognose vorgenommen werden (beide Varianten sind in diesem Code vorhanden).
+Um das Endwertproblem der Zerlegung zu adressieren, kann entweder eine
+simple Vorrausschätzung vorngenommen werden (Holt-Winters) oder eine
+saisonal-naive Zeitreihenprognose vorgenommen werden (beide Varianten
+sind in diesem Code vorhanden).
 
 ``` r
 # forecasting horizon (in months):
@@ -356,7 +356,7 @@ if(usemethod %in% c('detrend_normal','normal')) {
   
   # create training set (dependent variable and matrix of explanatory variables)
   ytilde_training <- ytilde_lags[(p+1):n,1]
-  x_train_df <- cbind(ytilde_lags[(p+1):n,2:(p+1)], # first p lags of y
+  x_train_df <- data.frame(ytilde_lags[(p+1):n,2:(p+1)], # first p lags of y
                       x_covid[(p+1):n], # indicator covid period
                       season_training_set[p:(n-1)], # season component of first lag
                       dummy_monat[(p+1):n], # indicator current month
@@ -402,7 +402,7 @@ if(usemethod %in% c('detrend_normal','normal')) {
     
     
     # create matrix of explanatory variables for the one-step ahead forecast:
-    x_test_df <- cbind(t(ytilde_lags[n,1:p]), # most recent observation and its first p-1 lags
+    x_test_df <- data.frame(t(ytilde_lags[n,1:p]), # most recent observation and its first p-1 lags
                     x_covid[n+1], # indicator covid period for current time point
                     season_training_set[n], # season component of most recent observation
                     dummy_monat[n+1], # indicator current month
@@ -422,7 +422,7 @@ if(usemethod %in% c('detrend_normal','normal')) {
 
     x_test_df <- x_test_df %>% setNames(paste0("X", seq_along(.)))
     # one-step ahead forecast of detrended time series:
-    ytilde_forecast <- predict(classifier, newdata = x_test_df)$predictions
+    ytilde_forecast <- predict(classifier, data = x_test_df)$predictions
     
     
     # combine both forecasts:
@@ -469,7 +469,7 @@ if(usemethod %in% c('detrend_mbb','mbb')) {
   
   # create training set (dependent variable and matrix of explanatory variables)
   ytilde_training <- ytilde_lags[(p+1):n,1]
-  x_training <- cbind(ytilde_lags[(p+1):n,2:(p+1)], # first p lags of y
+  x_training <- data.frame(ytilde_lags[(p+1):n,2:(p+1)], # first p lags of y
                       x_covid[(p+1):n], # indicator covid period
                       season_training_set[p:(n-1)], # season component of first lag
                       dummy_monat[(p+1):n], # indicator current month
@@ -518,7 +518,7 @@ if(usemethod %in% c('detrend_mbb','mbb')) {
     
     
     # create matrix of explanatory variables for the one-step ahead forecast:
-    x_test <- cbind(t(ytilde_lags[n,1:p]), # most recent observation and its first p-1 lags
+    x_test_df <- data.frame(t(ytilde_lags[n,1:p]), # most recent observation and its first p-1 lags
                     x_covid[n+1], # indicator covid period for current time point
                     season_training_set[n], # season component of most recent observation
                     dummy_monat[n+1], # indicator current month
@@ -539,7 +539,7 @@ if(usemethod %in% c('detrend_mbb','mbb')) {
     # one-step ahead forecast of detrended time series:
     x_test_df <- x_test_df %>% setNames(paste0("X", seq_along(.)))
 
-    ytilde_forecast <- predict(rf_mbb, data = x_test_df)$predictions
+    ytilde_forecast <- predict(classifier, data = x_test_df)$predictions
     
 
     
@@ -613,8 +613,8 @@ x_m <- prognose
 
 
 # read whole data set (saved as .csv file):
-data_proxy <- read.csv2("./data/proxy_data_daily.csv")
-maxbeds <- read.csv2("./data_input/bettenkapazität.csv")
+data_proxy <- read.csv2("./data/proxy_data_daily.csv", encoding = "latin1")
+maxbeds <- read.csv2("./data/bettenkapazität.csv", encoding = "latin1")
 
 regselect = region
 
@@ -638,17 +638,17 @@ große Rolle für die Nächtigungen spielen, allen voran die Urlaubsregion
 Murtal mit dem Red Bull Ring in Spielberg.
 
 ``` r
-D <- as.matrix(read.csv2("./data/matrix_daily_forecast.csv")[1:1096,3:147])#87/698
+D <- as.matrix(read.csv2("./data/matrix_daily_forecast.csv", encoding = "latin1")[1:1461,3:147])#87/698
 
-D <- cbind(D,daily_events_s[1:1096,i+1],daily_events_m[1:1096,i+1],daily_events_l[1:1096,i+1]) #698
+D <- cbind(D,daily_events_s[1:1461,i+1],daily_events_m[1:1461,i+1],daily_events_l[1:1461,i+1]) #698
 
 # add lag and lead
-lag_s <- daily_events_s[1:1096,i+1] %>% lag() %>% replace(is.na(.), 0)
-lag_m <- daily_events_m[1:1096,i+1] %>% lag() %>% replace(is.na(.), 0)
-lag_l <- daily_events_l[1:1096,i+1] %>% lag() %>% replace(is.na(.), 0)
-lead_s <- daily_events_s[1:1096,i+1] %>% lead() %>% replace(is.na(.), 0)
-lead_m <- daily_events_m[1:1096,i+1] %>% lead() %>% replace(is.na(.), 0)
-lead_l <- daily_events_l[1:1096,i+1] %>% lead() %>% replace(is.na(.), 0)
+lag_s <- daily_events_s[1:1461,i+1] %>% lag() %>% replace(is.na(.), 0)
+lag_m <- daily_events_m[1:1461,i+1] %>% lag() %>% replace(is.na(.), 0)
+lag_l <- daily_events_l[1:1461,i+1] %>% lag() %>% replace(is.na(.), 0)
+lead_s <- daily_events_s[1:1461,i+1] %>% lead() %>% replace(is.na(.), 0)
+lead_m <- daily_events_m[1:1461,i+1] %>% lead() %>% replace(is.na(.), 0)
+lead_l <- daily_events_l[1:1461,i+1] %>% lead() %>% replace(is.na(.), 0)
 
 D <- cbind(D,lag_s, lag_m, lag_l, lead_s,lead_m,lead_l)
 
@@ -724,8 +724,6 @@ coef_vec <- as.vector(coef(adalasso_model))#[-1]
 coef_model <- coef(adalasso_model)[,1]
 coef_full <- numeric(ncol(D[,13:ncol(D)]))
 coef_full[keep_cols] <- coef_model[-1] 
-
-
 ```
 
 Nachfolgend werden die geschätzten Koeffizienten des Modells
@@ -737,120 +735,144 @@ signifikant sind.
 coef(adalasso_model)
 ```
 
-    ## 111 x 1 sparse Matrix of class "dgCMatrix"
-    ##                                  s0
-    ## (Intercept)              4550.38547
-    ## d_newyear                 969.83882
-    ## d_dreikoenig             -581.88081
-    ## d_easter                  855.66681
-    ## d_staatsfeiertag            .      
-    ## d_christihimmelfahrt     2413.06207
-    ## d_pfingstmontag          -614.37656
-    ## d_fronleichnam           1537.91403
-    ## d_mariahimmelfahrt          .      
-    ## d_nationalfeiertag       -364.54553
-    ## d_allerheiligen          -148.19105
-    ## d_mariaempfaengnis          .      
-    ## d_xmas                   -911.49288
-    ## d_silvester               705.73351
-    ## Freitag                   838.66347
-    ## Samstag                   918.91253
-    ## Sonntag                   -44.85496
-    ## langes_we                 170.05563
-    ## herbstferien              594.07474
-    ## weihnachtsferien            .      
-    ## semesterferien_staffel1   973.40061
-    ## semesterferien_staffel2   379.26348
-    ## semesterferien_staffel3   108.72720
-    ## osterferien               221.48421
-    ## pfingstferien             622.30408
-    ## sommerferien              521.67068
-    ## winterferien_bayern      1561.79637
-    ## ostern_bayern               .      
-    ## pfingsten_bayern          217.64788
-    ## herbst_bayern               .      
-    ## ferien_bawue              376.39982
-    ## ferien_nrw                329.40416
-    ## ferien_restdeutschland    335.78335
-    ## ferien_nl                   .      
-    ## ferien_ch                   .      
-    ## ferien_it                 133.71172
-    ## ferien_cz                   .      
-    ## kw1                         .      
-    ## kw2                     -1928.43101
-    ## kw3                     -1690.09991
-    ## kw4                     -1320.13884
-    ## kw5                     -1110.70271
-    ## kw6                     -1612.32072
-    ## kw7                      -665.48708
-    ## kw8                         .      
-    ## kw9                      -480.37521
-    ## kw10                    -1845.01852
-    ## kw11                    -2417.99974
-    ## kw12                    -2966.20653
-    ## kw13                    -3489.65289
-    ## kw14                    -3763.63189
-    ## kw15                    -3633.26345
-    ## kw16                    -3693.51002
-    ## kw17                    -3187.43165
-    ## kw18                    -2949.64239
-    ## kw19                    -2586.04620
-    ## kw20                    -1901.87055
-    ## kw21                    -1492.91294
-    ## kw22                    -1350.23396
-    ## kw23                    -1007.38740
-    ## kw24                     -464.60260
-    ## kw25                     -113.79952
-    ## kw26                        .      
-    ## kw27                     -431.33609
-    ## kw28                     -129.04054
-    ## kw29                      186.22130
-    ## kw30                      167.31537
-    ## kw31                      660.26957
-    ## kw32                     1227.95270
-    ## kw33                      899.88393
-    ## kw34                      740.01474
-    ## kw35                        .      
-    ## kw36                        .      
-    ## kw37                        .      
-    ## kw38                      -41.61641
-    ## kw39                     -257.44752
-    ## kw40                      -50.08865
-    ## kw41                    -1816.62194
-    ## kw42                    -1999.46847
-    ## kw43                    -2640.17472
-    ## kw44                    -2989.52874
-    ## kw45                    -3550.94369
-    ## kw46                    -3542.03299
-    ## kw47                    -3676.45035
-    ## kw48                    -3602.35283
-    ## kw49                    -3557.46754
-    ## kw50                    -3388.78965
-    ## kw51                    -2880.11776
-    ## kw52                        .      
-    ## postcov                  -316.17799
-    ## we_jan                      .      
-    ## we_feb                      .      
-    ## we_mar                      .      
-    ## we_apr                      .      
-    ## we_may                    247.76352
-    ## we_jun                      .      
-    ## we_jul                      .      
-    ## we_aug                   -575.04881
-    ## we_sep                   -170.64702
-    ## we_oct                    147.07993
-    ## we_nov                   -192.92517
-    ## we_dec                      .      
-    ##                             .      
-    ##                             .      
-    ##                             .      
-    ## lag_s                       .      
-    ## lag_m                       .      
-    ## lag_l                       .      
-    ## lead_s                      .      
-    ## lead_m                      .      
-    ## lead_l                      .
-
+```         
+## 134 x 1 sparse Matrix of class "dgCMatrix"
+##                                   s0
+## (Intercept)             -0.410352048
+## d_newyear                0.483536204
+## d_dreikoenig            -0.441742016
+## d_easter                 0.334134830
+## d_staatsfeiertag         0.050682979
+## d_christihimmelfahrt     1.010138315
+## d_pfingstmontag         -0.088387012
+## d_fronleichnam           0.581962168
+## d_mariahimmelfahrt       .
+## d_nationalfeiertag       .
+## d_allerheiligen          0.220030715
+## d_mariaempfaengnis       0.036136022
+## d_weihnachtstag         -0.738812097
+## d_weihnachtsabend        0.316179369
+## d_stefanietag           -0.633347891
+## d_silvester              0.172669754
+## Donnerstag               0.001350595
+## Freitag                  0.149858474
+## Samstag                  0.235182532
+## Sonntag                 -0.051360456
+## Montag                   .
+## Dienstag                 .
+## langes_we                0.197754547
+## herbstferien             .
+## weihnachtsferien         .
+## semesterferien_staffel1  0.558608574
+## semesterferien_staffel2  0.656457088
+## semesterferien_staffel3  0.231092390
+## osterferien              0.063567794
+## pfingstferien            0.074452813
+## sommerferien             .
+## winterferien_bayern      0.551905335
+## ostern_bayern            0.099649160
+## pfingsten_bayern         0.209954094
+## herbst_bayern            0.228185071
+## ferien_bawue             0.252389758
+## ferien_nrw               0.117583693
+## ferien_restdeutschland   0.143820715
+## krokusferien_nl          0.291908763
+## restl_ferien_nl          0.098441325
+## ferien_ch                0.088286614
+## ferien_it                .
+## ferien_cz               -0.025479775
+## kw1                      0.104259170
+## kw2                      0.240310201
+## kw3                      0.408300117
+## kw4                      0.522810484
+## kw5                      0.357412519
+## kw6                      0.185048261
+## kw7                      0.406011381
+## kw8                      0.780005854
+## kw9                      0.568569244
+## kw10                     0.179439761
+## kw11                    -0.196252851
+## kw12                    -0.629923905
+## kw13                    -0.981525345
+## kw14                    -1.178182426
+## kw15                    -1.169554360
+## kw16                    -1.223914013
+## kw17                    -1.143700770
+## kw18                    -1.048686559
+## kw19                    -0.820451789
+## kw20                    -0.570214716
+## kw21                    -0.490549225
+## kw22                    -0.321337432
+## kw23                    -0.227278591
+## kw24                    -0.063167704
+## kw25                     .
+## kw26                    -0.025260030
+## kw27                     .
+## kw28                     0.306562256
+## kw29                     0.737632215
+## kw30                     0.959878013
+## kw31                     1.174837045
+## kw32                     1.325136380
+## kw33                     1.230483800
+## kw34                     1.069064766
+## kw35                     0.796949231
+## kw36                     0.852225389
+## kw37                     0.697808528
+## kw38                     0.625309772
+## kw39                     0.572845013
+## kw40                     0.136685713
+## kw41                     .
+## kw42                     .
+## kw43                    -0.262903227
+## kw44                    -0.497026869
+## kw45                    -0.349360499
+## kw46                    -0.336723472
+## kw47                    -0.408613236
+## kw48                    -0.479546395
+## kw49                    -0.554696589
+## kw50                    -0.402967582
+## kw51                    -0.257596234
+## postcov                 -0.051784482
+## we_jan                   0.017432872
+## we_feb                  -0.276292846
+## we_mar                  -0.142723393
+## we_apr                   .
+## we_may                   0.251417074
+## we_jun                   .
+## we_jul                   0.105226092
+## we_aug                  -0.253358805
+## we_sep                   .
+## we_oct                   0.005400720
+## we_dec                   0.070900443
+## fourier_kos             -0.643733878
+## fourier2_kos             0.083649325
+## fourier4_kos             0.136395734
+## jan_dez                  0.852609502
+## jan_feb                  0.117643173
+## feb_jan                  0.270015752
+## feb_mrz                  .
+## mrz_feb                  .
+## mrz_apr                  .
+## apr_mrz                 -0.023315203
+## apr_mai                  0.178003741
+## mai_apr                  .
+## mai_jun                  0.095407394
+## jun_mai                  .
+## jun_jul                  .
+## jul_jun                  .
+## jul_aug                 -0.202685454
+## aug_jul                 -0.163737882
+## aug_sep                 -0.012483277
+## sep_aug                  .
+## sep_oct                 -0.211223509
+## oct_sep                  0.331064536
+## oct_nov                  0.091024998
+## nov_oct                  .
+## nov_dez                  0.031656943
+## dez_nov                  0.119209230
+## dez_jan                  1.350085215
+## brückentag              -0.043399042
+```
 
 Daraufhin wird die Disaggregation der Monatsprognose vorbereitet.
 Relevante Zeiträume werden definiert und die Fehlerterme werden den
@@ -888,13 +910,13 @@ für den Prognosezeitraum erstellt.
 ``` r
 # Second step: update the daily forecast by adding dummy effects
 last_available_date = as.Date("01.06.2025","%d.%m.%Y")
-tmpcheck1 <- read.csv2("./data/matrix_daily_forecast.csv")[,1:2]
+tmpcheck1 <- read.csv2("./data/matrix_daily_forecast.csv", encoding="latin1")[,1:2]
 tmpcheck1$date <- as.Date(tmpcheck1$date,format="%d.%m.%Y")
 rowdate1 <- tmpcheck1[tmpcheck1$date==as.Date(last_available_date %m+% months(1)),1]#1096
-tmpcheck2 <- read.csv2("./data/matrix_daily_forecast.csv")[,1:2]
+tmpcheck2 <- read.csv2("./data/matrix_daily_forecast.csv", encoding="latin1")[,1:2]
 tmpcheck2$date <- as.Date(tmpcheck2$date,format="%d.%m.%Y")
 rowdate2 <- tmpcheck2[tmpcheck2$date==as.Date(last_available_date %m+% months(13)-1),1]#1096
-D_fp <- as.matrix(read.csv2("./data/matrix_daily_forecast.csv")[rowdate1:rowdate2,3:147])
+D_fp <- as.matrix(read.csv2("./data/matrix_daily_forecast.csv", encoding="latin1")[rowdate1:rowdate2,3:147])
 
 D_fp <- cbind(D_fp,daily_events_s[rowdate1:rowdate2,i+1],daily_events_m[rowdate1:rowdate2,i+1],daily_events_l[rowdate1:rowdate2,i+1])
 
@@ -914,8 +936,9 @@ D_fp <- D_fp[, colSums(abs(D)) != 0]
 
 Anschließend werden die geschätzten Effekte auf die zu
 prognostizierenden Tage aufgerechnet, wobei die Datenmatrix die Effekte
-definiert. Zudem werden Scale und Center herangezogen, um von der normierten
-Zeitreihe auf eine interpretierbare Größe der Nächtigungen hochzurechnen.
+definiert. Zudem werden Scale und Center herangezogen, um von der
+normierten Zeitreihe auf eine interpretierbare Größe der Nächtigungen
+hochzurechnen.
 
 ``` r
 daily_forecasts$forecasts <- 0
@@ -931,7 +954,7 @@ for(t in 2:T){
   daily_forecasts$forecasts[t] <- lin_part 
 }
 
-region_scale <- read.csv2("data_input/region_scale_13032026.csv", encoding = "latin1")
+region_scale <- read.csv2("data/region_scale_13032026.csv", encoding = "latin1")
 reg_scale <- region_scale %>% filter(Region == regselect) %>% select(year)
 reg_center <- x_m %>% sum()/365
 
@@ -943,9 +966,9 @@ daily_forecasts$forecasts <- daily_forecasts$forecasts - min(min(daily_forecasts
 
 Der letzte Schritt betrifft die Glättung der Ergebnisse, um die
 Konsistenz der täglichen Werte mit der Monatsprognose zu gewährleisten
-und das Bettenmaximum der Region nicht zu überschreiben.
-Die Prüfsumme wird ausgegeben und sollte null sein (oder ein minimaler
-Wert im hinteren Kommabereich aufgrund von Rundungsdifferenzen).
+und das Bettenmaximum der Region nicht zu überschreiben. Die Prüfsumme
+wird ausgegeben und sollte null sein (oder ein minimaler Wert im
+hinteren Kommabereich aufgrund von Rundungsdifferenzen).
 
 ``` r
 # get running index
@@ -1047,7 +1070,9 @@ for(idnr in 1:12){
 print(sum(x_m)- sum(daily_forecasts$forecasts, na.rm = T))
 ```
 
-    ## [1] 2.328306e-10
+```         
+## [1] 0
+```
 
 Das Ergebnis der täglichen Disaggregation sowie die mittleren
 Monatswerte sind in folgender Grafik abgebildet, zudem werden die
@@ -1088,24 +1113,68 @@ grid()
 
 ## Mögliche Anwendungsbeispiele
 
-Über die Schnittstelle können Daten für die eigene Anwendung bezogen werden, für tiefergehende Fragestellungen empfiehlt es sich jedoch, den vorliegenden Code selbst anzuwenden und auch die Inputparameter zu ergänzen und um eigene Eventlisten etc. anzureichern. Für eine Übersicht über mögliche Anwendungen werden hier exemplarisch ein paar Beispiele angeführt:
+Über die Schnittstelle können Daten für die eigene Anwendung bezogen
+werden, für tiefergehende Fragestellungen empfiehlt es sich jedoch, den
+vorliegenden Code selbst anzuwenden und auch die Inputparameter zu
+ergänzen und um eigene Eventlisten etc. anzureichern. Für eine Übersicht
+über mögliche Anwendungen werden hier exemplarisch ein paar Beispiele
+angeführt:
 
-Tourismusregionen stehen vor der Herausforderung, Personal- und Infrastrukturressourcen langfristig an die erwartete Nachfrage anzupassen. Das Prognosemodell liefert auf Monatsbasis Nächtigungsprognosen, die eine frühzeitige Planung von Personal, Verkehrsdiensten, touristischen Angeboten und Marketingmaßnahmen ermöglichen. Durch die einjährige Vorausprognose können Verantwortliche in Tourismusverbänden saisonale Spitzen frühzeitig erkennen und strategische Entscheidungen – etwa zur Verteilung von Budgets, zur Planung von Events oder zur Koordination mit regionalen Betrieben – datenbasiert treffen.
+Tourismusregionen stehen vor der Herausforderung, Personal- und
+Infrastrukturressourcen langfristig an die erwartete Nachfrage
+anzupassen. Das Prognosemodell liefert auf Monatsbasis
+Nächtigungsprognosen, die eine frühzeitige Planung von Personal,
+Verkehrsdiensten, touristischen Angeboten und Marketingmaßnahmen
+ermöglichen. Durch die einjährige Vorausprognose können Verantwortliche
+in Tourismusverbänden saisonale Spitzen frühzeitig erkennen und
+strategische Entscheidungen – etwa zur Verteilung von Budgets, zur
+Planung von Events oder zur Koordination mit regionalen Betrieben –
+datenbasiert treffen.
 
-Für Hotelbetreiber:innen und Anbieter:innen von Ferienwohnungen bieten die täglichen Prognosen wertvolle Informationen zur kurzfristigen Nachfrageentwicklung. Auf Basis der disaggregierten Tageswerte lassen sich Belegungsstrategien, Preisgestaltung (Revenue Management) und Personalplanung optimieren. Besonders in umkämpften Märkten können Betriebe dadurch ihre Auslastung steigern, indem sie Kapazitäten und Preise dynamisch an vorhergesagte Nachfrageveränderungen anpassen – etwa bei Feiertagen, Ferienbeginn oder Großveranstaltungen.
+Für Hotelbetreiber:innen und Anbieter:innen von Ferienwohnungen bieten
+die täglichen Prognosen wertvolle Informationen zur kurzfristigen
+Nachfrageentwicklung. Auf Basis der disaggregierten Tageswerte lassen
+sich Belegungsstrategien, Preisgestaltung (Revenue Management) und
+Personalplanung optimieren. Besonders in umkämpften Märkten können
+Betriebe dadurch ihre Auslastung steigern, indem sie Kapazitäten und
+Preise dynamisch an vorhergesagte Nachfrageveränderungen anpassen – etwa
+bei Feiertagen, Ferienbeginn oder Großveranstaltungen.
 
-Veranstalter und regionale Entscheidungsträger können mithilfe der täglichen Prognosen die Wirkung von Großevents oder wiederkehrenden Veranstaltungen besser abschätzen. Durch den Vergleich von Prognosen mit und ohne Event-Tagen lässt sich die zusätzliche Nachfrage (Event-Impact) quantifizieren. Diese Erkenntnisse unterstützen sowohl die Begründung von Förderentscheidungen als auch die Wahl optimaler Veranstaltungszeitpunkte, um Synergieeffekte mit bestehenden touristischen Strömen zu nutzen und Überlastungen zu vermeiden.
+Veranstalter und regionale Entscheidungsträger können mithilfe der
+täglichen Prognosen die Wirkung von Großevents oder wiederkehrenden
+Veranstaltungen besser abschätzen. Durch den Vergleich von Prognosen mit
+und ohne Event-Tagen lässt sich die zusätzliche Nachfrage (Event-Impact)
+quantifizieren. Diese Erkenntnisse unterstützen sowohl die Begründung
+von Förderentscheidungen als auch die Wahl optimaler
+Veranstaltungszeitpunkte, um Synergieeffekte mit bestehenden
+touristischen Strömen zu nutzen und Überlastungen zu vermeiden.
 
-Tourismusorganisationen und Marketingabteilungen können die Prognosedaten nutzen, um den Erfolg spezifischer Kampagnen quantitativ zu evaluieren. Durch den Abgleich zwischen prognostizierter und tatsächlicher Nächtigungsentwicklung lässt sich bestimmen, ob bestimmte Werbeaktivitäten, Preisaktionen oder Kooperationen überdurchschnittliche Nachfrageeffekte ausgelöst haben. In Verbindung mit den Mobilfunkdaten wird zudem erkennbar, welche Herkunftsmärkte oder Zielgruppen auf Marketingimpulse besonders stark reagieren.
+Tourismusorganisationen und Marketingabteilungen können die
+Prognosedaten nutzen, um den Erfolg spezifischer Kampagnen quantitativ
+zu evaluieren. Durch den Abgleich zwischen prognostizierter und
+tatsächlicher Nächtigungsentwicklung lässt sich bestimmen, ob bestimmte
+Werbeaktivitäten, Preisaktionen oder Kooperationen überdurchschnittliche
+Nachfrageeffekte ausgelöst haben. In Verbindung mit den Mobilfunkdaten
+wird zudem erkennbar, welche Herkunftsmärkte oder Zielgruppen auf
+Marketingimpulse besonders stark reagieren.
 
-Mit einigen Erweiterungen kann das Modell zudem als Szenariorechnung dienen. So könnten besonders günstige Monate, besonder schöne Tage oder ähnliches in den vergangenen Daten erfasst werden um dann die Prognose mit und ohne diesen günstigen Inputparametern zu erstellen und die Ergebnisse zu vergleichen. So kann beispielsweise überprüft werden, wie sich ein Herbstwochenende bei gutem oder bei schlechtem Wetter entwickelt.
+Mit einigen Erweiterungen kann das Modell zudem als Szenariorechnung
+dienen. So könnten besonders günstige Monate, besonder schöne Tage oder
+ähnliches in den vergangenen Daten erfasst werden um dann die Prognose
+mit und ohne diesen günstigen Inputparametern zu erstellen und die
+Ergebnisse zu vergleichen. So kann beispielsweise überprüft werden, wie
+sich ein Herbstwochenende bei gutem oder bei schlechtem Wetter
+entwickelt.
 
 ## Hinweise
 
-Eine Beschreibung des monatlichen Forecasting wurde von Karsten Reichold publiziert und ist hier zu finden: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5494688
-Das Projekt wird zudem über das Jahr 2026 im Rahmen eines weiteren angestrebten
-Papers konstant bearbeitet und ist kleineren Änderungen und
+Eine Beschreibung des monatlichen Forecasting wurde von Karsten Reichold
+publiziert und ist hier zu finden:
+<https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5494688>.
+Das Projekt wird zudem über das Jahr 2026 im Rahmen eines weiteren
+angestrebten Papers konstant bearbeitet und ist kleineren Änderungen und
 Anpassungen unterworfen. Die Daten werden monatlich upgedated und sind
 über folgende Schnittstellen abrufbar:
 <https://naechtigungen.pol.joanneum.at/docs#/>. Bei Fragen posten Sie
 bitte einen Thread im “Issues” Bereich.
+
