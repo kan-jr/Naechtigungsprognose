@@ -38,11 +38,11 @@ in Hotels und Ferienwohnungen von Statistik Austria, kalendarische Daten
 und Daten zu Events für Random Forest und Disaggregation, die
 empfohlenen Modellparameter pro Prognoseregion aus einem umfangreichen
 Gridsearch sowie pseudonymisierte tägliche Nächtigungsdaten für die
-Jahre 2022, 2023 und 2024. Diese Daten wurden aus einer
+Jahre 2022, 2023, 2024 und 2025. Diese Daten wurden aus einer
 Linearkombination aus ausgewählten Daten von Feratel und Mobilfunkdaten
-von Drei und A1/Invenium erstellt und können für dieses Projekt oder
-eigene Anwendungen mit Verweis auf dieses Projekt und die Österreich
-Werbung frei verwendet werden.
+von Drei und A1/Invenium mit ergänzenden kalendarischen Variablen erstellt und
+können für dieses Projekt oder eigene Anwendungen mit Verweis auf dieses Projekt und
+die Österreich Werbung frei verwendet werden.
 
 ## Genutzte Pakete und Hilfsfunktionen
 
@@ -218,7 +218,8 @@ Out-of-Sample-Prognose.
   x_covid_training <- c(rep(0, 242),rep(1,24),rep(0,24)) # Covid period in the training sample: 01/2020 - 12/2021 (2 years)
 ```
 
-Das volle Sample der Nächtigungen reicht von November 1999 bis heute.
+Das volle Sample der Nächtigungen reicht von November 1999 bis Juli 2025, aktuelle Daten der Statistik Austria
+werden mit etwa 1-2 Monaten Verzögerung veröffentlicht.
 
 ``` r
   dummy_ostern <- holidays$Ostersonntag %>% as.factor()
@@ -591,7 +592,7 @@ tägliche Nächtigungsverhalten approximieren zu können, wurden
 Mobilfunkdaten von den Anbietern Drei und A1 (analysiert und zur
 Verfügung gestellt von Invenium Data Insights) erworben. Diese Daten
 wurden als Zählvariablen nach Tag und Region zur Verfügung gestellt
-(Zeitraum Jänner 2022 bis Dezember 2024). Ausgehend von den täglichen
+(Zeitraum Jänner 2022 bis Dezember 2025). Ausgehend von den täglichen
 Verläufen, die auf Basis der Mobilfunkdaten für eine bestimmte Region
 darstellbar sind, schätzen wir zunächst die Auswirkungen von
 Wochenenden, Monaten, Ferien und Feiertagen sowie die Position der Woche
@@ -729,7 +730,9 @@ coef_full[keep_cols] <- coef_model[-1]
 Nachfolgend werden die geschätzten Koeffizienten des Modells
 dargestellt. Ein Punkt bedeutet dabei, dass die Parameter aus dem Modell
 über das Schätzverfahren ausgeschieden wurden, da diese nicht
-signifikant sind.
+signifikant sind. Durch Überschneidungen zwischen Ferien‑ und Feiertags‑Dummies kann
+es zu multikollinearen Maskierungseffekten kommen. Daher bedeutet fehlende Signifikanz
+oder Nicht‑Auswahl nicht automatisch, dass die entsprechende Variable keinen Einfluss hat.
 
 ``` r
 coef(adalasso_model)
@@ -875,10 +878,7 @@ coef(adalasso_model)
 ```
 
 Daraufhin wird die Disaggregation der Monatsprognose vorbereitet.
-Relevante Zeiträume werden definiert und die Fehlerterme werden den
-relevanten Tagen hinzugefügt, wobei diese Effekte an den Monatsgrenzen
-sowie an der Jahresgrenze (Dezember zu Jänner) stärker gewichtet wurden,
-da hier Ausschläge aufgrund der Übergänge plausibler sind.
+Relevante Zeiträume werden definiert.
 
 ``` r
 # previous time
